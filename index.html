@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Shane Ward Music is relaunching soon — music software, creative audio tools, and production resources." />
+  <title>Shane Ward Music — Relaunch Coming Soon</title>
+
+  <style>
+    :root {
+      --blue: #168CE6;
+      --blue-deep: #315BCE;
+      --violet: #6B38D1;
+      --purple: #8627D8;
+      --ink: #101525;
+      --muted: #667085;
+      --panel: rgba(255, 255, 255, 0.72);
+      --stroke: rgba(255, 255, 255, 0.38);
+      --shadow: 0 24px 80px rgba(27, 44, 104, 0.18);
+      --radius: 28px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-height: 100%;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 18% 24%, rgba(22, 140, 230, 0.22), transparent 32rem),
+        radial-gradient(circle at 82% 34%, rgba(134, 39, 216, 0.24), transparent 30rem),
+        radial-gradient(circle at 50% 92%, rgba(49, 91, 206, 0.12), transparent 34rem),
+        linear-gradient(135deg, #fbfcff 0%, #f3f6ff 52%, #fbf7ff 100%);
+      overflow-x: hidden;
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      pointer-events: none;
+      z-index: 0;
+      filter: blur(1px);
+      opacity: 0.62;
+    }
+
+    body::before {
+      width: 42rem;
+      height: 42rem;
+      left: -18rem;
+      top: 10vh;
+      border-radius: 50%;
+      background: conic-gradient(from 200deg, rgba(22, 140, 230, 0.26), rgba(134, 39, 216, 0.18), rgba(22, 140, 230, 0.26));
+      animation: drift 14s ease-in-out infinite alternate;
+    }
+
+    body::after {
+      width: 35rem;
+      height: 35rem;
+      right: -16rem;
+      bottom: -12rem;
+      border-radius: 50%;
+      background: conic-gradient(from 40deg, rgba(134, 39, 216, 0.24), rgba(49, 91, 206, 0.16), rgba(22, 140, 230, 0.20));
+      animation: drift 18s ease-in-out infinite alternate-reverse;
+    }
+
+    @keyframes drift {
+      from { transform: translate3d(0, 0, 0) rotate(0deg); }
+      to { transform: translate3d(4rem, -2rem, 0) rotate(18deg); }
+    }
+
+    .page {
+      position: relative;
+      z-index: 1;
+      width: min(1180px, calc(100% - 40px));
+      min-height: 100vh;
+      margin: 0 auto;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      align-items: center;
+      padding: 30px 0 56px;
+    }
+
+    .top-brand {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      padding: 4px 0 clamp(26px, 5vw, 54px);
+    }
+
+    .top-logo {
+      width: min(620px, 78vw);
+      height: auto;
+      filter: drop-shadow(0 18px 34px rgba(45, 52, 138, 0.14));
+    }
+
+    .hero {
+      width: 100%;
+      display: grid;
+      grid-template-columns: minmax(0, 1.04fr) minmax(320px, 0.96fr);
+      gap: clamp(28px, 5vw, 72px);
+      align-items: center;
+    }
+
+    .copy {
+      max-width: 680px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 22px;
+      padding: 9px 14px;
+      border: 1px solid rgba(107, 56, 209, 0.18);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.62);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 10px 30px rgba(49, 91, 206, 0.08);
+      color: #3b45a5;
+      font-size: 0.88rem;
+      font-weight: 750;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .pulse {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--blue), var(--purple));
+      box-shadow: 0 0 0 0 rgba(22, 140, 230, 0.55);
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      70% { box-shadow: 0 0 0 12px rgba(22, 140, 230, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(22, 140, 230, 0); }
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(3.2rem, 9vw, 7.7rem);
+      line-height: 0.88;
+      letter-spacing: -0.075em;
+      text-wrap: balance;
+    }
+
+    .gradient-text {
+      background: linear-gradient(100deg, var(--blue) 4%, var(--blue-deep) 43%, var(--purple) 86%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .subhead {
+      margin: 28px 0 0;
+      max-width: 54ch;
+      color: #384057;
+      font-size: clamp(1.06rem, 1.8vw, 1.28rem);
+      line-height: 1.72;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: center;
+      margin-top: 36px;
+    }
+
+    .button {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      min-height: 52px;
+      padding: 0 22px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      text-decoration: none;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+    }
+
+    .button.primary {
+      color: #fff;
+      background: linear-gradient(105deg, var(--blue), var(--blue-deep) 48%, var(--purple));
+      box-shadow: 0 18px 44px rgba(72, 73, 205, 0.28);
+    }
+
+    .button.secondary {
+      color: #253153;
+      background: rgba(255, 255, 255, 0.68);
+      border-color: rgba(49, 91, 206, 0.15);
+      box-shadow: 0 12px 34px rgba(16, 21, 37, 0.07);
+      backdrop-filter: blur(18px);
+    }
+
+    .button.secondary:hover {
+      border-color: rgba(134, 39, 216, 0.28);
+      box-shadow: 0 16px 42px rgba(16, 21, 37, 0.1);
+    }
+
+    .panel-wrap {
+      position: relative;
+    }
+
+    .panel-wrap::before {
+      content: "";
+      position: absolute;
+      inset: -28px;
+      border-radius: calc(var(--radius) + 20px);
+      background: linear-gradient(135deg, rgba(22, 140, 230, 0.24), rgba(134, 39, 216, 0.24));
+      filter: blur(34px);
+      opacity: 0.78;
+      z-index: -1;
+    }
+
+    .brand-card {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(155deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.54)),
+        linear-gradient(135deg, rgba(22, 140, 230, 0.08), rgba(134, 39, 216, 0.08));
+      backdrop-filter: blur(24px);
+      box-shadow: var(--shadow);
+      padding: clamp(24px, 4vw, 42px);
+    }
+
+    .brand-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(22, 140, 230, 0.08) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(134, 39, 216, 0.07) 1px, transparent 1px);
+      background-size: 34px 34px;
+      mask-image: linear-gradient(to bottom, black, transparent 78%);
+      opacity: 0.8;
+    }
+
+    .preview-plate {
+      position: relative;
+      min-height: 310px;
+      border-radius: 24px;
+      background:
+        linear-gradient(135deg, rgba(22, 140, 230, 0.12), rgba(134, 39, 216, 0.12)),
+        rgba(10, 14, 27, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+      overflow: hidden;
+    }
+
+    .preview-plate::after {
+      content: "Sneak peek";
+      position: absolute;
+      left: 18px;
+      bottom: 18px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      color: #ffffff;
+      background: rgba(13, 18, 34, 0.66);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(12px);
+      font-size: 0.78rem;
+      font-weight: 850;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .preview-image {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 310px;
+      object-fit: cover;
+      object-position: center;
+      opacity: 0.94;
+      transform: scale(1.01);
+    }
+
+    .card-footer {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .tile {
+      min-height: 96px;
+      padding: 16px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid rgba(255, 255, 255, 0.56);
+    }
+
+    .tile strong {
+      display: block;
+      font-size: 1.35rem;
+      letter-spacing: -0.05em;
+      background: linear-gradient(100deg, var(--blue), var(--purple));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .tile span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.35;
+    }
+
+    .wave {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 98px;
+      opacity: 0.42;
+      overflow: hidden;
+    }
+
+    .wave svg {
+      width: 180%;
+      height: 100%;
+      animation: slide 8s linear infinite;
+    }
+
+    @keyframes slide {
+      from { transform: translateX(0); }
+      to { transform: translateX(-44%); }
+    }
+
+    .footer-note {
+      position: relative;
+      left: auto;
+      right: auto;
+      bottom: auto;
+      margin: 34px auto 28px;
+      width: min(1180px, calc(100% - 40px));
+      color: rgba(56, 64, 87, 0.62);
+      font-size: 0.9rem;
+    }
+
+    .footer-note a {
+      color: #3b45a5;
+      text-decoration: none;
+      font-weight: 750;
+    }
+
+    .footer-note a:hover {
+      text-decoration: underline;
+    }
+
+    @media (max-width: 880px) {
+      .page {
+        align-items: start;
+        padding-top: 34px;
+        padding-bottom: 86px;
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
+      .copy {
+        max-width: none;
+      }
+
+      .brand-card {
+        order: -1;
+      }
+
+      .preview-plate,
+      .preview-image {
+        min-height: 230px;
+      }
+
+      .card-footer {
+        grid-template-columns: 1fr;
+      }
+
+      .tile {
+        min-height: auto;
+      }
+
+      .footer-note {
+        margin-top: 34px;
+        padding-bottom: 28px;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .page {
+        width: min(100% - 24px, 1180px);
+      }
+
+      .eyebrow {
+        font-size: 0.76rem;
+      }
+
+      h1 {
+        font-size: clamp(3rem, 18vw, 4.75rem);
+      }
+
+      .actions {
+        align-items: stretch;
+      }
+
+      .button {
+        width: 100%;
+      }
+
+      .brand-card {
+        padding: 16px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="page">
+    <header class="top-brand" aria-label="Shane Ward Music">
+      <img class="top-logo" src="swm-logo.png" alt="SWM logo for Shane Ward Music" />
+    </header>
+
+    <section class="hero" aria-label="Shane Ward Music relaunch coming soon">
+      <div class="copy">
+        <p class="eyebrow"><span class="pulse" aria-hidden="true"></span> Relaunch coming soon</p>
+
+        <h1>
+          New sounds.<br>
+          <span class="gradient-text">Sharper tools.</span><br>
+          Same SWM.
+        </h1>
+
+        <p class="subhead">
+          Shane Ward Music is being rebuilt into a cleaner home for music software,
+          creative audio tools, production ideas, and the odd bit of sonic mischief.
+          The new site is warming up backstage.
+        </p>
+
+        <div class="actions" aria-label="Primary actions">
+          <a class="button primary" href="mailto:hello@shanewardmusic.com">Get in touch</a>
+          <a class="button secondary" href="#updates">What&rsquo;s coming</a>
+        </div>
+      </div>
+
+      <aside class="panel-wrap">
+        <div class="brand-card">
+          <div class="preview-plate">
+            <img class="preview-image" src="swm-mastering-suite-preview.jpeg" alt="Preview of the upcoming SWM Mastering Suite interface" />
+          </div>
+
+          <div class="card-footer" id="updates">
+            <div class="tile">
+              <strong>Audio Plugins</strong>
+              <span>Practical music-making tools with studio-minded workflows.</span>
+            </div>
+            <div class="tile">
+              <strong>Mastering</strong>
+              <span>Fast, focused controls for polished final touches.</span>
+            </div>
+            <div class="tile">
+              <strong>Music</strong>
+              <span>Production resources, releases, and experiments.</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <div class="wave" aria-hidden="true">
+    <svg viewBox="0 0 1200 120" preserveAspectRatio="none">
+      <path d="M0,74 C80,42 140,42 220,74 S360,106 440,74 580,42 660,74 800,106 880,74 1020,42 1100,74 1240,106 1320,74 L1320,120 L0,120 Z" fill="url(#swmGradient)" />
+      <defs>
+        <linearGradient id="swmGradient" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0%" stop-color="#168CE6" />
+          <stop offset="50%" stop-color="#315BCE" />
+          <stop offset="100%" stop-color="#8627D8" />
+        </linearGradient>
+      </defs>
+    </svg>
+  </div>
+
+  <p class="footer-note">
+    © <span id="year"></span> Shane Ward Music. Built for the next thing.
+  </p>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
