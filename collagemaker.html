@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Photo Collage Builder</title>
+  <style>
+    :root {
+      --bg: #111827;
+      --panel: #1f2937;
+      --panel-2: #253244;
+      --text: #f9fafb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+      --accent-2: #a78bfa;
+      --danger: #fb7185;
+      --border: rgba(255,255,255,0.14);
+      --shadow: 0 20px 70px rgba(0,0,0,0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(96,165,250,0.20), transparent 34rem),
+        radial-gradient(circle at top right, rgba(167,139,250,0.18), transparent 30rem),
+        var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    button, input, select { font: inherit; }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 14px;
+      color: var(--text);
+      background: var(--panel-2);
+      cursor: pointer;
+      transition: transform 0.12s ease, background 0.12s ease, opacity 0.12s ease;
+      user-select: none;
+    }
+
+    button:hover { transform: translateY(-1px); background: #334155; }
+    button:active { transform: translateY(0); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+    .primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      font-weight: 700;
+    }
+
+    .primary:hover { background: linear-gradient(135deg, #7bb6ff, #b79bff); }
+    .danger { background: rgba(251,113,133,0.18); color: #fecdd3; }
+    .danger:hover { background: rgba(251,113,133,0.30); }
+
+    .app {
+      display: grid;
+      grid-template-columns: 320px 1fr 320px;
+      grid-template-rows: 100vh;
+      gap: 0;
+    }
+
+    aside {
+      background: rgba(17, 24, 39, 0.80);
+      backdrop-filter: blur(18px);
+      border-right: 1px solid var(--border);
+      padding: 18px;
+      overflow-y: auto;
+    }
+
+    aside.right {
+      border-right: 0;
+      border-left: 1px solid var(--border);
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 24px;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+    }
+
+    h2 {
+      margin: 22px 0 10px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+    }
+
+    p {
+      color: var(--muted);
+      margin: 0 0 14px;
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .field { margin-bottom: 12px; }
+
+    label {
+      display: block;
+      margin: 0 0 5px;
+      color: #d1d5db;
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    input[type="number"], input[type="text"], input[type="color"], select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      padding: 10px 11px;
+      outline: none;
+    }
+
+    input[type="color"] { height: 43px; padding: 4px; }
+    input[type="range"] { width: 100%; }
+
+    .scrub-field label,
+    .scrubbable-number {
+      cursor: ew-resize;
+    }
+
+    .scrub-hint {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 500;
+      opacity: 0.75;
+    }
+
+    body.scrubbing {
+      cursor: ew-resize;
+      user-select: none;
+    }
+
+    input:focus, select:focus {
+      border-color: rgba(96,165,250,0.8);
+      box-shadow: 0 0 0 3px rgba(96,165,250,0.16);
+    }
+
+    .button-stack { display: grid; gap: 10px; }
+    .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .file-zone {
+      border: 1.5px dashed rgba(255,255,255,0.22);
+      border-radius: 18px;
+      padding: 18px;
+      min-height: 132px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      background: rgba(255,255,255,0.045);
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .file-zone.dragging { border-color: var(--accent); background: rgba(96,165,250,0.12); }
+    .file-zone strong { display: block; margin-bottom: 4px; color: #e5e7eb; }
+    #photoInput { display: none; }
+
+    main {
+      position: relative;
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      overflow: hidden;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(17, 24, 39, 0.50);
+      backdrop-filter: blur(15px);
+    }
+
+    .topbar .left, .topbar .right-buttons {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 8px 11px;
+      background: rgba(255,255,255,0.06);
+      color: #d1d5db;
+      font-size: 13px;
+    }
+
+    .workspace {
+      position: relative;
+      overflow: auto;
+      padding: 38px;
+    }
+
+    .stage-wrap {
+      width: max-content;
+      margin: auto;
+      transform-origin: top left;
+    }
+
+    #stage {
+      position: relative;
+      width: 1200px;
+      height: 800px;
+      background: #ffffff;
+      background-image:
+        linear-gradient(45deg, rgba(0,0,0,0.035) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(0,0,0,0.035) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, rgba(0,0,0,0.035) 75%),
+        linear-gradient(-45deg, transparent 75%, rgba(0,0,0,0.035) 75%);
+      background-size: 28px 28px;
+      background-position: 0 0, 0 14px, 14px -14px, -14px 0px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    .photo-item {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 280px;
+      height: 200px;
+      transform-origin: center center;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .photo-item:active { cursor: grabbing; }
+
+    .photo-item.selected {
+      outline: 2px solid var(--accent);
+      box-shadow: 0 0 0 6px rgba(96,165,250,0.22);
+    }
+
+    .photo-viewport {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      border-radius: inherit;
+      background: rgba(0,0,0,0.08);
+    }
+
+    .photo-viewport img {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      max-width: none;
+      pointer-events: none;
+      user-select: none;
+      transform-origin: center center;
+    }
+
+    .photo-frame {
+      position: absolute;
+      left: 0;
+      top: 0;
+      transform-origin: center center;
+      pointer-events: none;
+      user-select: none;
+      touch-action: none;
+      z-index: 9999;
+    }
+
+    .handle {
+      display: none;
+      position: absolute;
+      width: 15px;
+      height: 15px;
+      border: 2px solid #fff;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+      z-index: 10001;
+    }
+
+    .selected .handle { display: block; }
+    .handle.nw { left: -8px; top: -8px; cursor: nwse-resize; }
+    .handle.ne { right: -8px; top: -8px; cursor: nesw-resize; }
+    .handle.sw { left: -8px; bottom: -8px; cursor: nesw-resize; }
+    .handle.se { right: -8px; bottom: -8px; cursor: nwse-resize; }
+    .handle.rotate { left: 50%; top: -38px; transform: translateX(-50%); cursor: grab; background: var(--accent-2); }
+
+    .rotate-line {
+      display: none;
+      position: absolute;
+      left: 50%;
+      top: -26px;
+      width: 2px;
+      height: 26px;
+      background: rgba(96,165,250,0.85);
+      transform: translateX(-50%);
+      z-index: 10000;
+    }
+
+    .selected .rotate-line { display: block; }
+
+    .layer-list { display: grid; gap: 8px; }
+
+    .layer {
+      display: grid;
+      grid-template-columns: 44px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.055);
+      border-radius: 14px;
+      padding: 8px;
+      cursor: grab;
+    }
+
+    .layer:active { cursor: grabbing; }
+    .layer.active { border-color: rgba(96,165,250,0.85); background: rgba(96,165,250,0.14); }
+    .layer.dragging { opacity: 0.45; }
+    .layer.drop-before { box-shadow: 0 -3px 0 var(--accent); }
+    .layer.drop-after { box-shadow: 0 3px 0 var(--accent); }
+
+    .layer img {
+      width: 44px;
+      height: 36px;
+      object-fit: cover;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.08);
+    }
+
+    .layer-name {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 13px;
+    }
+
+    .mini-btn { padding: 6px 8px; border-radius: 9px; font-size: 12px; cursor: pointer; }
+
+    .hint {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255,255,255,0.045);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 1050px) {
+      body { overflow: auto; }
+      .app { grid-template-columns: 1fr; grid-template-rows: auto auto auto; min-height: 100vh; }
+      aside, aside.right { border: 0; border-bottom: 1px solid var(--border); max-height: none; }
+      main { min-height: 70vh; }
+      .workspace { padding: 22px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <h1>Photo Collage Builder</h1>
+      <p>Add photos, set your output size, freely position/crop, then export the finished collage as a PNG.</p>
+
+      <h2>Output resolution</h2>
+      <div class="row">
+        <div class="field">
+          <label for="canvasWidth">Width px</label>
+          <input id="canvasWidth" type="number" min="100" max="12000" step="10" value="1200" />
+        </div>
+        <div class="field">
+          <label for="canvasHeight">Height px</label>
+          <input id="canvasHeight" type="number" min="100" max="12000" step="10" value="800" />
+        </div>
+      </div>
+      <div class="row">
+        <button id="applySize">Apply Size</button>
+        <button id="presetSquare">Square 3000</button>
+      </div>
+
+      <div class="field" style="margin-top: 12px;">
+        <label for="bgColor">Background colour</label>
+        <input id="bgColor" type="color" value="#ffffff" />
+      </div>
+
+      <h2>Canvas border</h2>
+      <div class="row">
+        <div class="field scrub-field" data-scrub-target="canvasBorderWidth">
+          <label for="canvasBorderWidth">Thickness <span class="scrub-hint">drag</span></label>
+          <input id="canvasBorderWidth" class="scrubbable-number" type="number" min="0" max="1000" step="1" value="0" />
+        </div>
+        <div class="field">
+          <label for="canvasBorderColor">Colour</label>
+          <input id="canvasBorderColor" type="color" value="#ffffff" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="canvasBorderRadius">Corner radius / shape</label>
+        <input id="canvasBorderRadius" type="range" min="0" max="600" value="0" />
+      </div>
+
+      <h2>Add photos</h2>
+      <div id="dropZone" class="file-zone">
+        <div>
+          <strong>Drop images here</strong>
+          <span>or click to choose files</span>
+        </div>
+      </div>
+      <input id="photoInput" type="file" accept="image/*" multiple />
+
+      <h2>View</h2>
+      <div class="field">
+        <label for="zoom">Workspace zoom</label>
+        <input id="zoom" type="range" min="10" max="150" value="70" />
+      </div>
+      <div class="button-row">
+        <button id="zoomFit">Fit</button>
+        <button id="zoom100">100%</button>
+      </div>
+
+      <h2>Tips</h2>
+      <div class="hint">
+        <strong>Move:</strong> drag a photo.<br />
+        <strong>Resize crop frame:</strong> drag a corner handle.<br />
+        <strong>Crop inside frame:</strong> use Image Zoom and Image X/Y on the right.<br />
+        <strong>Rotate:</strong> drag the top handle or use the rotation field.<br />
+        <strong>Layers:</strong> drag layer rows to reorder them freely.<br />
+        <strong>Reset sliders:</strong> double-click any slider.
+      </div>
+    </aside>
+
+    <main>
+      <div class="topbar">
+        <div class="left">
+          <span id="sizePill" class="pill">1200 × 800 px</span>
+          <span id="countPill" class="pill">0 photos</span>
+        </div>
+        <div class="right-buttons">
+          <button id="clearAll" class="danger">Clear</button>
+          <button id="exportPng" class="primary">Export PNG</button>
+        </div>
+      </div>
+      <div id="workspace" class="workspace">
+        <div id="stageWrap" class="stage-wrap">
+          <div id="stage" aria-label="Collage canvas"></div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="right">
+      <h2>Selected photo</h2>
+      <div id="emptySelection" class="hint">Select a photo to adjust its crop, frame, rotation, opacity, border radius, and layer order.</div>
+
+      <div id="controls" class="hidden">
+        <div class="row">
+          <div class="field"><label for="photoX">X</label><input id="photoX" type="number" step="1" /></div>
+          <div class="field"><label for="photoY">Y</label><input id="photoY" type="number" step="1" /></div>
+        </div>
+
+        <div class="row">
+          <div class="field"><label for="photoW">Frame W</label><input id="photoW" type="number" min="10" step="1" /></div>
+          <div class="field"><label for="photoH">Frame H</label><input id="photoH" type="number" min="10" step="1" /></div>
+        </div>
+
+        <div class="field"><label for="photoRotation">Rotation</label><input id="photoRotation" type="range" min="-180" max="180" value="0" /></div>
+        <div class="field"><label for="imageZoom">Image Zoom / Crop</label><input id="imageZoom" type="range" min="10" max="400" value="100" /></div>
+
+        <div class="row">
+          <div class="field"><label for="cropX">Image X</label><input id="cropX" type="range" min="-500" max="500" value="0" /></div>
+          <div class="field"><label for="cropY">Image Y</label><input id="cropY" type="range" min="-500" max="500" value="0" /></div>
+        </div>
+
+        <div class="field"><label for="opacity">Opacity</label><input id="opacity" type="range" min="0" max="100" value="100" /></div>
+        <div class="field"><label for="radius">Photo corner radius / shape</label><input id="radius" type="range" min="0" max="300" value="0" /></div>
+
+        <div class="row">
+          <div class="field scrub-field" data-scrub-target="borderWidth"><label for="borderWidth">Border thickness <span class="scrub-hint">drag</span></label><input id="borderWidth" class="scrubbable-number" type="number" min="0" max="500" step="1" value="0" /></div>
+          <div class="field"><label for="borderColor">Border colour</label><input id="borderColor" type="color" value="#ffffff" /></div>
+        </div>
+
+        <div class="button-stack">
+          <div class="button-row"><button id="bringForward">Forward</button><button id="sendBackward">Backward</button></div>
+          <div class="button-row"><button id="bringFront">To Front</button><button id="sendBack">To Back</button></div>
+          <button id="duplicatePhoto">Duplicate Photo</button>
+          <button id="deletePhoto" class="danger">Delete Photo</button>
+        </div>
+      </div>
+
+      <h2>Layers</h2>
+      <div id="layerList" class="layer-list"></div>
+    </aside>
+  </div>
+
+  <script>
+    const stage = document.getElementById('stage');
+    const stageWrap = document.getElementById('stageWrap');
+    const workspace = document.getElementById('workspace');
+    const photoInput = document.getElementById('photoInput');
+    const dropZone = document.getElementById('dropZone');
+    const layerList = document.getElementById('layerList');
+    const controls = document.getElementById('controls');
+    const emptySelection = document.getElementById('emptySelection');
+
+    const state = {
+      width: 1200,
+      height: 800,
+      bgColor: '#ffffff',
+      canvasBorderWidth: 0,
+      canvasBorderColor: '#ffffff',
+      canvasBorderRadius: 0,
+      zoom: 0.7,
+      photos: [],
+      selectedId: null,
+      nextId: 1,
+      drag: null
+    };
+
+    const els = {
+      canvasWidth: document.getElementById('canvasWidth'),
+      canvasHeight: document.getElementById('canvasHeight'),
+      bgColor: document.getElementById('bgColor'),
+      canvasBorderWidth: document.getElementById('canvasBorderWidth'),
+      canvasBorderColor: document.getElementById('canvasBorderColor'),
+      canvasBorderRadius: document.getElementById('canvasBorderRadius'),
+      applySize: document.getElementById('applySize'),
+      presetSquare: document.getElementById('presetSquare'),
+      zoom: document.getElementById('zoom'),
+      zoomFit: document.getElementById('zoomFit'),
+      zoom100: document.getElementById('zoom100'),
+      sizePill: document.getElementById('sizePill'),
+      countPill: document.getElementById('countPill'),
+      exportPng: document.getElementById('exportPng'),
+      clearAll: document.getElementById('clearAll'),
+      photoX: document.getElementById('photoX'),
+      photoY: document.getElementById('photoY'),
+      photoW: document.getElementById('photoW'),
+      photoH: document.getElementById('photoH'),
+      photoRotation: document.getElementById('photoRotation'),
+      imageZoom: document.getElementById('imageZoom'),
+      cropX: document.getElementById('cropX'),
+      cropY: document.getElementById('cropY'),
+      opacity: document.getElementById('opacity'),
+      radius: document.getElementById('radius'),
+      borderWidth: document.getElementById('borderWidth'),
+      borderColor: document.getElementById('borderColor'),
+      bringForward: document.getElementById('bringForward'),
+      sendBackward: document.getElementById('sendBackward'),
+      bringFront: document.getElementById('bringFront'),
+      sendBack: document.getElementById('sendBack'),
+      duplicatePhoto: document.getElementById('duplicatePhoto'),
+      deletePhoto: document.getElementById('deletePhoto')
+    };
+
+    function selectedPhoto() {
+      return state.photos.find(p => p.id === state.selectedId) || null;
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function updateStageSize() {
+      stage.style.width = state.width + 'px';
+      stage.style.height = state.height + 'px';
+      stage.style.backgroundColor = state.bgColor;
+      stage.style.border = `${state.canvasBorderWidth || 0}px solid ${state.canvasBorderColor || '#ffffff'}`;
+      stage.style.borderRadius = `${state.canvasBorderRadius || 0}px`;
+      els.sizePill.textContent = `${state.width} × ${state.height} px`;
+    }
+
+    function updateZoom() {
+      stageWrap.style.transform = `scale(${state.zoom})`;
+      stageWrap.style.width = state.width * state.zoom + 'px';
+      stageWrap.style.height = state.height * state.zoom + 'px';
+      els.zoom.value = Math.round(state.zoom * 100);
+    }
+
+    function fitZoom() {
+      const pad = 90;
+      const borderExtra = (state.canvasBorderWidth || 0) * 2;
+      const availableW = Math.max(200, workspace.clientWidth - pad);
+      const availableH = Math.max(200, workspace.clientHeight - pad);
+      state.zoom = clamp(Math.min(availableW / (state.width + borderExtra), availableH / (state.height + borderExtra)), 0.05, 1.5);
+      updateZoom();
+    }
+
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      });
+    }
+
+    async function addFiles(files) {
+      const imageFiles = [...files].filter(file => file.type.startsWith('image/'));
+      for (const file of imageFiles) {
+        const src = await readFileAsDataUrl(file);
+        const img = await loadImage(src);
+        const maxW = state.width * 0.45;
+        const maxH = state.height * 0.45;
+        const ratio = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight, 1);
+        const w = Math.max(120, img.naturalWidth * ratio);
+        const h = Math.max(90, img.naturalHeight * ratio);
+        const photo = {
+          id: state.nextId++,
+          name: file.name || `Photo ${state.nextId}`,
+          src,
+          naturalWidth: img.naturalWidth,
+          naturalHeight: img.naturalHeight,
+          x: (state.width - w) / 2 + Math.random() * 40 - 20,
+          y: (state.height - h) / 2 + Math.random() * 40 - 20,
+          w,
+          h,
+          rotation: 0,
+          imageZoom: 1,
+          cropX: 0,
+          cropY: 0,
+          opacity: 1,
+          radius: 0,
+          borderWidth: 0,
+          borderColor: '#ffffff'
+        };
+        state.photos.push(photo);
+        createPhotoElement(photo);
+        selectPhoto(photo.id);
+      }
+      renderAll();
+    }
+
+    function createPhotoElement(photo) {
+      const item = document.createElement('div');
+      item.className = 'photo-item';
+      item.dataset.id = photo.id;
+      item.innerHTML = `
+        <div class="photo-viewport"><img alt=""></div>
+        <div class="rotate-line"></div>
+        <div class="handle rotate" data-action="rotate"></div>
+        <div class="handle nw" data-action="resize" data-corner="nw"></div>
+        <div class="handle ne" data-action="resize" data-corner="ne"></div>
+        <div class="handle sw" data-action="resize" data-corner="sw"></div>
+        <div class="handle se" data-action="resize" data-corner="se"></div>
+      `;
+      item.querySelector('img').src = photo.src;
+      item.addEventListener('pointerdown', onPhotoPointerDown);
+      stage.appendChild(item);
+      ensurePhotoFrame(photo);
+    }
+
+    function ensurePhotoFrame(photo) {
+      let frame = stage.querySelector(`.photo-frame[data-id="${photo.id}"]`);
+      if (!frame) {
+        frame = document.createElement('div');
+        frame.className = 'photo-frame';
+        frame.dataset.id = photo.id;
+        stage.appendChild(frame);
+      }
+      return frame;
+    }
+
+    function updatePhotoElement(photo) {
+      const item = stage.querySelector(`.photo-item[data-id="${photo.id}"]`);
+      if (!item) return;
+
+      item.style.width = photo.w + 'px';
+      item.style.height = photo.h + 'px';
+      item.style.transform = `translate(${photo.x}px, ${photo.y}px) rotate(${photo.rotation}deg)`;
+      item.style.opacity = photo.opacity;
+      item.style.borderRadius = photo.radius + 'px';
+      item.style.border = '0';
+      item.classList.toggle('selected', photo.id === state.selectedId);
+
+      const img = item.querySelector('img');
+      const fitScale = Math.max(photo.w / photo.naturalWidth, photo.h / photo.naturalHeight);
+      const displayW = photo.naturalWidth * fitScale * photo.imageZoom;
+      const displayH = photo.naturalHeight * fitScale * photo.imageZoom;
+      img.style.width = displayW + 'px';
+      img.style.height = displayH + 'px';
+      img.style.transform = `translate(calc(-50% + ${photo.cropX}px), calc(-50% + ${photo.cropY}px))`;
+
+      const frame = ensurePhotoFrame(photo);
+      frame.style.width = photo.w + 'px';
+      frame.style.height = photo.h + 'px';
+      frame.style.transform = `translate(${photo.x}px, ${photo.y}px) rotate(${photo.rotation}deg)`;
+      frame.style.opacity = photo.opacity;
+      frame.style.borderRadius = photo.radius + 'px';
+      frame.style.border = `${photo.borderWidth || 0}px solid ${photo.borderColor || '#ffffff'}`;
+      frame.style.display = (photo.borderWidth || 0) > 0 ? 'block' : 'none';
+    }
+
+    function renderAll() {
+      state.photos.forEach(updatePhotoElement);
+      renderLayers();
+      syncControls();
+      els.countPill.textContent = `${state.photos.length} photo${state.photos.length === 1 ? '' : 's'}`;
+    }
+
+    function renderLayers() {
+      layerList.innerHTML = '';
+      [...state.photos].slice().reverse().forEach(photo => {
+        const row = document.createElement('div');
+        row.className = 'layer' + (photo.id === state.selectedId ? ' active' : '');
+        row.draggable = true;
+        row.dataset.id = photo.id;
+        row.innerHTML = `
+          <img src="${photo.src}" alt="">
+          <div class="layer-name" title="${escapeHtml(photo.name)}">${escapeHtml(photo.name)}</div>
+          <button class="mini-btn" type="button">Select</button>
+        `;
+        row.addEventListener('click', () => selectPhoto(photo.id));
+        row.addEventListener('dragstart', onLayerDragStart);
+        row.addEventListener('dragover', onLayerDragOver);
+        row.addEventListener('dragleave', clearLayerDropMarkers);
+        row.addEventListener('drop', onLayerDrop);
+        row.addEventListener('dragend', onLayerDragEnd);
+        layerList.appendChild(row);
+      });
+      reorderDomToMatchLayers();
+    }
+
+    function onLayerDragStart(event) {
+      const row = event.currentTarget;
+      row.classList.add('dragging');
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', row.dataset.id);
+    }
+
+    function onLayerDragOver(event) {
+      event.preventDefault();
+      const row = event.currentTarget;
+      const rect = row.getBoundingClientRect();
+      const before = event.clientY < rect.top + rect.height / 2;
+      clearLayerDropMarkers();
+      row.classList.add(before ? 'drop-before' : 'drop-after');
+      event.dataTransfer.dropEffect = 'move';
+    }
+
+    function onLayerDrop(event) {
+      event.preventDefault();
+      const draggedId = Number(event.dataTransfer.getData('text/plain'));
+      const targetId = Number(event.currentTarget.dataset.id);
+      if (!draggedId || !targetId || draggedId === targetId) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const placeBeforeInVisibleList = event.clientY < rect.top + rect.height / 2;
+      reorderLayerFromVisibleList(draggedId, targetId, placeBeforeInVisibleList);
+      clearLayerDropMarkers();
+      renderAll();
+    }
+
+    function onLayerDragEnd() {
+      clearLayerDropMarkers();
+      document.querySelectorAll('.layer.dragging').forEach(row => row.classList.remove('dragging'));
+    }
+
+    function clearLayerDropMarkers() {
+      document.querySelectorAll('.layer.drop-before, .layer.drop-after').forEach(row => {
+        row.classList.remove('drop-before', 'drop-after');
+      });
+    }
+
+    function reorderLayerFromVisibleList(draggedId, targetId, placeBeforeInVisibleList) {
+      const visible = [...state.photos].slice().reverse();
+      const draggedIndex = visible.findIndex(p => p.id === draggedId);
+      if (draggedIndex < 0) return;
+      const [dragged] = visible.splice(draggedIndex, 1);
+      let insertIndex = visible.findIndex(p => p.id === targetId);
+      if (insertIndex < 0) return;
+      if (!placeBeforeInVisibleList) insertIndex += 1;
+      visible.splice(insertIndex, 0, dragged);
+      state.photos = visible.reverse();
+    }
+
+    function reorderDomToMatchLayers() {
+      state.photos.forEach(photo => {
+        const item = stage.querySelector(`.photo-item[data-id="${photo.id}"]`);
+        if (item) stage.appendChild(item);
+      });
+      state.photos.forEach(photo => {
+        const frame = stage.querySelector(`.photo-frame[data-id="${photo.id}"]`);
+        if (frame) stage.appendChild(frame);
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>'"]/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[char]));
+    }
+
+    function selectPhoto(id) {
+      state.selectedId = id;
+      renderAll();
+    }
+
+    function deselectPhoto() {
+      state.selectedId = null;
+      renderAll();
+    }
+
+    function syncControls() {
+      const p = selectedPhoto();
+      controls.classList.toggle('hidden', !p);
+      emptySelection.classList.toggle('hidden', !!p);
+      if (!p) return;
+      els.photoX.value = Math.round(p.x);
+      els.photoY.value = Math.round(p.y);
+      els.photoW.value = Math.round(p.w);
+      els.photoH.value = Math.round(p.h);
+      els.photoRotation.value = Math.round(p.rotation);
+      els.imageZoom.value = Math.round(p.imageZoom * 100);
+      els.cropX.value = Math.round(p.cropX);
+      els.cropY.value = Math.round(p.cropY);
+      els.opacity.value = Math.round(p.opacity * 100);
+      els.radius.value = Math.round(p.radius);
+      els.borderWidth.value = Math.round(p.borderWidth || 0);
+      els.borderColor.value = p.borderColor || '#ffffff';
+    }
+
+    function onPhotoPointerDown(event) {
+      const item = event.currentTarget;
+      const id = Number(item.dataset.id);
+      const photo = state.photos.find(p => p.id === id);
+      if (!photo) return;
+      selectPhoto(id);
+      item.setPointerCapture(event.pointerId);
+      const action = event.target.dataset.action || 'move';
+      const pointer = stagePointer(event);
+      const rect = item.getBoundingClientRect();
+      state.drag = {
+        id,
+        action,
+        corner: event.target.dataset.corner || null,
+        startPointer: pointer,
+        start: { ...photo },
+        centerClient: { x: (rect.left + rect.right) / 2, y: (rect.top + rect.bottom) / 2 }
+      };
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp, { once: true });
+    }
+
+    function stagePointer(event) {
+      const rect = stage.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left) / state.zoom,
+        y: (event.clientY - rect.top) / state.zoom
+      };
+    }
+
+    function onPointerMove(event) {
+      const drag = state.drag;
+      if (!drag) return;
+      const p = state.photos.find(photo => photo.id === drag.id);
+      if (!p) return;
+
+      if (drag.action === 'move') {
+        const pointer = stagePointer(event);
+        p.x = drag.start.x + (pointer.x - drag.startPointer.x);
+        p.y = drag.start.y + (pointer.y - drag.startPointer.y);
+      }
+
+      if (drag.action === 'resize') {
+        const pointer = stagePointer(event);
+        resizePhoto(p, drag.start, drag.corner, pointer.x - drag.startPointer.x, pointer.y - drag.startPointer.y);
+      }
+
+      if (drag.action === 'rotate') {
+        const angle = Math.atan2(event.clientY - drag.centerClient.y, event.clientX - drag.centerClient.x) * 180 / Math.PI;
+        p.rotation = Math.round(angle + 90);
+      }
+
+      updatePhotoElement(p);
+      syncControls();
+    }
+
+    function onPointerUp() {
+      state.drag = null;
+      renderAll();
+      window.removeEventListener('pointermove', onPointerMove);
+    }
+
+    function resizePhoto(p, start, corner, dx, dy) {
+      const min = 30;
+      let x = start.x;
+      let y = start.y;
+      let w = start.w;
+      let h = start.h;
+      if (corner.includes('e')) w = Math.max(min, start.w + dx);
+      if (corner.includes('s')) h = Math.max(min, start.h + dy);
+      if (corner.includes('w')) { w = Math.max(min, start.w - dx); x = start.x + (start.w - w); }
+      if (corner.includes('n')) { h = Math.max(min, start.h - dy); y = start.y + (start.h - h); }
+      p.x = x;
+      p.y = y;
+      p.w = w;
+      p.h = h;
+    }
+
+    function mutateSelected(callback) {
+      const p = selectedPhoto();
+      if (!p) return;
+      callback(p);
+      updatePhotoElement(p);
+      renderLayers();
+      syncControls();
+    }
+
+    function changeLayer(direction) {
+      const idx = state.photos.findIndex(p => p.id === state.selectedId);
+      if (idx < 0) return;
+      const newIdx = clamp(idx + direction, 0, state.photos.length - 1);
+      if (newIdx === idx) return;
+      const [photo] = state.photos.splice(idx, 1);
+      state.photos.splice(newIdx, 0, photo);
+      renderAll();
+    }
+
+    function sendToLayer(position) {
+      const idx = state.photos.findIndex(p => p.id === state.selectedId);
+      if (idx < 0) return;
+      const [photo] = state.photos.splice(idx, 1);
+      if (position === 'front') state.photos.push(photo);
+      else state.photos.unshift(photo);
+      renderAll();
+    }
+
+    function deleteSelected() {
+      const p = selectedPhoto();
+      if (!p) return;
+      const item = stage.querySelector(`.photo-item[data-id="${p.id}"]`);
+      const frame = stage.querySelector(`.photo-frame[data-id="${p.id}"]`);
+      if (item) item.remove();
+      if (frame) frame.remove();
+      state.photos = state.photos.filter(photo => photo.id !== p.id);
+      state.selectedId = null;
+      renderAll();
+    }
+
+    function duplicateSelected() {
+      const p = selectedPhoto();
+      if (!p) return;
+      const copy = { ...p, id: state.nextId++, name: p.name.replace(/( copy)*$/i, '') + ' copy', x: p.x + 30, y: p.y + 30 };
+      state.photos.push(copy);
+      createPhotoElement(copy);
+      selectPhoto(copy.id);
+    }
+
+    async function exportPng() {
+      const canvas = document.createElement('canvas');
+      canvas.width = state.width;
+      canvas.height = state.height;
+      const ctx = canvas.getContext('2d');
+
+      const canvasBorderWidth = Math.max(0, state.canvasBorderWidth || 0);
+      const canvasBorderRadius = Math.max(0, state.canvasBorderRadius || 0);
+
+      // Keep outside rounded canvas corners transparent in the exported PNG.
+      ctx.clearRect(0, 0, state.width, state.height);
+      ctx.save();
+      roundedRectClip(ctx, 0, 0, state.width, state.height, canvasBorderRadius);
+      ctx.fillStyle = state.bgColor;
+      ctx.fillRect(0, 0, state.width, state.height);
+
+      const loadedPhotos = [];
+      for (const photo of state.photos) {
+        const img = await loadImage(photo.src);
+        loadedPhotos.push({ photo, img });
+        drawPhotoToCanvas(ctx, img, photo);
+      }
+
+      // Borders are exported after every photo, so they behave like custom frames sitting above the whole collage.
+      for (const { photo } of loadedPhotos) {
+        drawPhotoBorderToCanvas(ctx, photo);
+      }
+
+      ctx.restore();
+
+      if (canvasBorderWidth > 0) {
+        const halfBorder = canvasBorderWidth / 2;
+        ctx.save();
+        ctx.strokeStyle = state.canvasBorderColor || '#ffffff';
+        ctx.lineWidth = canvasBorderWidth;
+        roundedRectPath(ctx, halfBorder, halfBorder, state.width - canvasBorderWidth, state.height - canvasBorderWidth, Math.max(0, canvasBorderRadius - halfBorder));
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      const url = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g, '-');
+      link.href = url;
+      link.download = `collage-${state.width}x${state.height}-${stamp}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+
+    function drawPhotoToCanvas(ctx, img, p) {
+      ctx.save();
+      ctx.globalAlpha = p.opacity;
+      ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
+      ctx.rotate(p.rotation * Math.PI / 180);
+      roundedRectClip(ctx, -p.w / 2, -p.h / 2, p.w, p.h, p.radius);
+      const fitScale = Math.max(p.w / p.naturalWidth, p.h / p.naturalHeight);
+      const scale = fitScale * p.imageZoom;
+      const drawW = p.naturalWidth * scale;
+      const drawH = p.naturalHeight * scale;
+      ctx.drawImage(img, -drawW / 2 + p.cropX, -drawH / 2 + p.cropY, drawW, drawH);
+      ctx.restore();
+    }
+
+    function drawPhotoBorderToCanvas(ctx, p) {
+      const borderWidth = Math.max(0, p.borderWidth || 0);
+      if (borderWidth <= 0) return;
+      const halfBorder = borderWidth / 2;
+      ctx.save();
+      ctx.globalAlpha = p.opacity;
+      ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
+      ctx.rotate(p.rotation * Math.PI / 180);
+      ctx.strokeStyle = p.borderColor || '#ffffff';
+      ctx.lineWidth = borderWidth;
+      roundedRectPath(ctx, -p.w / 2 + halfBorder, -p.h / 2 + halfBorder, p.w - borderWidth, p.h - borderWidth, Math.max(0, p.radius - halfBorder));
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function roundedRectPath(ctx, x, y, w, h, r) {
+      r = Math.min(Math.max(0, r), Math.max(0, w / 2), Math.max(0, h / 2));
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function roundedRectClip(ctx, x, y, w, h, r) {
+      roundedRectPath(ctx, x, y, w, h, r);
+      ctx.clip();
+    }
+
+    function addSliderDoubleClickReset(slider, defaultValue) {
+      slider.addEventListener('dblclick', () => {
+        slider.value = defaultValue;
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+
+    function setupScrubbableNumber(input, options = {}) {
+      const min = Number(input.min || options.min || 0);
+      const max = Number(input.max || options.max || 1000);
+      const step = Number(input.step || options.step || 1);
+      const sensitivity = options.sensitivity || step;
+      let scrub = null;
+
+      const startScrub = event => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        input.focus();
+        scrub = {
+          startX: event.clientX,
+          startValue: Number(input.value) || 0
+        };
+        document.body.classList.add('scrubbing');
+        window.addEventListener('pointermove', onScrubMove);
+        window.addEventListener('pointerup', stopScrub, { once: true });
+      };
+
+      const onScrubMove = event => {
+        if (!scrub) return;
+        const delta = event.clientX - scrub.startX;
+        const raw = scrub.startValue + delta * sensitivity;
+        const stepped = Math.round(raw / step) * step;
+        input.value = clamp(stepped, min, max);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+
+      const stopScrub = () => {
+        scrub = null;
+        document.body.classList.remove('scrubbing');
+        window.removeEventListener('pointermove', onScrubMove);
+      };
+
+      input.addEventListener('pointerdown', startScrub);
+
+      const field = input.closest('.scrub-field');
+      const label = field?.querySelector('label');
+      if (label) label.addEventListener('pointerdown', startScrub);
+    }
+
+    dropZone.addEventListener('click', () => photoInput.click());
+    photoInput.addEventListener('change', event => addFiles(event.target.files));
+
+    ['dragenter', 'dragover'].forEach(type => {
+      dropZone.addEventListener(type, event => {
+        event.preventDefault();
+        dropZone.classList.add('dragging');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(type => {
+      dropZone.addEventListener(type, event => {
+        event.preventDefault();
+        dropZone.classList.remove('dragging');
+      });
+    });
+
+    dropZone.addEventListener('drop', event => addFiles(event.dataTransfer.files));
+
+    els.applySize.addEventListener('click', () => {
+      state.width = clamp(Number(els.canvasWidth.value) || 1200, 100, 12000);
+      state.height = clamp(Number(els.canvasHeight.value) || 800, 100, 12000);
+      els.canvasWidth.value = state.width;
+      els.canvasHeight.value = state.height;
+      updateStageSize();
+      fitZoom();
+    });
+
+    els.presetSquare.addEventListener('click', () => {
+      els.canvasWidth.value = 3000;
+      els.canvasHeight.value = 3000;
+      els.applySize.click();
+    });
+
+    els.bgColor.addEventListener('input', () => {
+      state.bgColor = els.bgColor.value;
+      updateStageSize();
+    });
+
+    els.canvasBorderWidth.addEventListener('input', () => {
+      state.canvasBorderWidth = Math.max(0, Number(els.canvasBorderWidth.value) || 0);
+      updateStageSize();
+      fitZoom();
+    });
+
+    els.canvasBorderColor.addEventListener('input', () => {
+      state.canvasBorderColor = els.canvasBorderColor.value || '#ffffff';
+      updateStageSize();
+    });
+
+    els.canvasBorderRadius.addEventListener('input', () => {
+      state.canvasBorderRadius = Math.max(0, Number(els.canvasBorderRadius.value) || 0);
+      updateStageSize();
+    });
+
+    els.zoom.addEventListener('input', () => {
+      state.zoom = Number(els.zoom.value) / 100;
+      updateZoom();
+    });
+
+    els.zoomFit.addEventListener('click', fitZoom);
+    els.zoom100.addEventListener('click', () => { state.zoom = 1; updateZoom(); });
+
+    stage.addEventListener('pointerdown', event => {
+      if (event.target === stage) deselectPhoto();
+    });
+
+    els.exportPng.addEventListener('click', exportPng);
+
+    els.clearAll.addEventListener('click', () => {
+      if (!state.photos.length) return;
+      if (!confirm('Clear all photos from the collage?')) return;
+      state.photos = [];
+      state.selectedId = null;
+      stage.innerHTML = '';
+      renderAll();
+    });
+
+    els.photoX.addEventListener('input', () => mutateSelected(p => p.x = Number(els.photoX.value) || 0));
+    els.photoY.addEventListener('input', () => mutateSelected(p => p.y = Number(els.photoY.value) || 0));
+    els.photoW.addEventListener('input', () => mutateSelected(p => p.w = Math.max(10, Number(els.photoW.value) || 10)));
+    els.photoH.addEventListener('input', () => mutateSelected(p => p.h = Math.max(10, Number(els.photoH.value) || 10)));
+    els.photoRotation.addEventListener('input', () => mutateSelected(p => p.rotation = Number(els.photoRotation.value) || 0));
+    els.imageZoom.addEventListener('input', () => mutateSelected(p => p.imageZoom = Number(els.imageZoom.value) / 100));
+    els.cropX.addEventListener('input', () => mutateSelected(p => p.cropX = Number(els.cropX.value) || 0));
+    els.cropY.addEventListener('input', () => mutateSelected(p => p.cropY = Number(els.cropY.value) || 0));
+    els.opacity.addEventListener('input', () => mutateSelected(p => p.opacity = Number(els.opacity.value) / 100));
+    els.radius.addEventListener('input', () => mutateSelected(p => p.radius = Number(els.radius.value) || 0));
+    els.borderWidth.addEventListener('input', () => mutateSelected(p => p.borderWidth = Math.max(0, Number(els.borderWidth.value) || 0)));
+    els.borderColor.addEventListener('input', () => mutateSelected(p => p.borderColor = els.borderColor.value || '#ffffff'));
+
+    els.bringForward.addEventListener('click', () => changeLayer(1));
+    els.sendBackward.addEventListener('click', () => changeLayer(-1));
+    els.bringFront.addEventListener('click', () => sendToLayer('front'));
+    els.sendBack.addEventListener('click', () => sendToLayer('back'));
+    els.deletePhoto.addEventListener('click', deleteSelected);
+    els.duplicatePhoto.addEventListener('click', duplicateSelected);
+
+    addSliderDoubleClickReset(els.zoom, 70);
+    addSliderDoubleClickReset(els.canvasBorderRadius, 0);
+    addSliderDoubleClickReset(els.photoRotation, 0);
+    addSliderDoubleClickReset(els.imageZoom, 100);
+    addSliderDoubleClickReset(els.cropX, 0);
+    addSliderDoubleClickReset(els.cropY, 0);
+    addSliderDoubleClickReset(els.opacity, 100);
+    addSliderDoubleClickReset(els.radius, 0);
+
+    setupScrubbableNumber(els.canvasBorderWidth, { min: 0, max: 1000, step: 1, sensitivity: 1 });
+    setupScrubbableNumber(els.borderWidth, { min: 0, max: 500, step: 1, sensitivity: 1 });
+
+    window.addEventListener('keydown', event => {
+      const p = selectedPhoto();
+      if (!p) return;
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (['input', 'select', 'textarea'].includes(activeTag)) return;
+      const step = event.shiftKey ? 10 : 1;
+      if (event.key === 'Delete' || event.key === 'Backspace') deleteSelected();
+      if (event.key === 'ArrowLeft') { p.x -= step; event.preventDefault(); }
+      if (event.key === 'ArrowRight') { p.x += step; event.preventDefault(); }
+      if (event.key === 'ArrowUp') { p.y -= step; event.preventDefault(); }
+      if (event.key === 'ArrowDown') { p.y += step; event.preventDefault(); }
+      updatePhotoElement(p);
+      syncControls();
+    });
+
+    window.addEventListener('resize', () => {
+      if (Number(els.zoom.value) !== 100) fitZoom();
+    });
+
+    updateStageSize();
+    fitZoom();
+    renderAll();
+  </script>
+</body>
+</html>
