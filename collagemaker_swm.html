@@ -289,16 +289,24 @@
 
     .workspace { position: relative; overflow: auto; padding: 38px; }
 
-    .workspace::before {
-      content: "";
+    .workspace::before { display: none; }
+
+    .swm-bottom-wave {
       position: fixed;
       left: 330px;
       right: 330px;
       bottom: 0;
-      height: 98px;
-      opacity: 0.22;
+      height: 108px;
+      opacity: 0.42;
+      overflow: hidden;
       pointer-events: none;
-      background: url("data:image/svg+xml,%3Csvg viewBox='0 0 1200 120' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'%3E%3Cpath d='M0,74 C80,42 140,42 220,74 S360,106 440,74 580,42 660,74 800,106 880,74 1020,42 1100,74 1240,106 1320,74 L1320,120 L0,120 Z' fill='%23315BCE'/%3E%3C/svg%3E") repeat-x bottom / 900px 90px;
+      z-index: 0;
+    }
+
+    .swm-bottom-wave svg {
+      width: 100%;
+      height: 100%;
+      display: block;
     }
 
     .stage-wrap { width: max-content; margin: auto; transform-origin: top left; position: relative; z-index: 1; }
@@ -378,7 +386,7 @@
       aside, aside.right { border: 0; border-bottom: 1px solid var(--stroke); max-height: none; box-shadow: none; }
       main { min-height: 70vh; }
       .workspace { padding: 22px; }
-      .workspace::before { left: 0; right: 0; }
+      .swm-bottom-wave { left: 0; right: 0; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -525,6 +533,44 @@
       <div id="layerList" class="layer-list"></div>
     </aside>
   </div>
+
+  <div class="swm-bottom-wave" aria-hidden="true">
+    <svg viewBox="0 0 1200 120" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="swmWaveGradientA" x1="0" x2="1200" y1="0" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#168CE6" />
+          <stop offset="50%" stop-color="#8627D8" />
+          <stop offset="100%" stop-color="#168CE6" />
+        </linearGradient>
+        <linearGradient id="swmWaveGradientB" x1="1200" x2="2400" y1="0" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#168CE6" />
+          <stop offset="50%" stop-color="#8627D8" />
+          <stop offset="100%" stop-color="#168CE6" />
+        </linearGradient>
+        <linearGradient id="swmWaveGradientC" x1="2400" x2="3600" y1="0" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#168CE6" />
+          <stop offset="50%" stop-color="#8627D8" />
+          <stop offset="100%" stop-color="#168CE6" />
+        </linearGradient>
+      </defs>
+
+      <g>
+        <animateTransform
+          attributeName="transform"
+          attributeType="XML"
+          type="translate"
+          from="0 0"
+          to="-1200 0"
+          dur="18s"
+          repeatCount="indefinite" />
+
+        <path d="M0,76 C180,38 420,38 600,76 S1020,114 1200,76 L1200,120 L0,120 Z" fill="url(#swmWaveGradientA)" />
+        <path d="M1200,76 C1380,38 1620,38 1800,76 S2220,114 2400,76 L2400,120 L1200,120 Z" fill="url(#swmWaveGradientB)" />
+        <path d="M2400,76 C2580,38 2820,38 3000,76 S3420,114 3600,76 L3600,120 L2400,120 Z" fill="url(#swmWaveGradientC)" />
+      </g>
+    </svg>
+  </div>
+
 
   <script>
     const stage = document.getElementById('stage');
