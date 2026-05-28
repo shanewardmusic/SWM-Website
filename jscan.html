@@ -1,0 +1,2244 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="JScan" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>JScan Photo Report</title>
+
+  <!--
+    JScan Photo Report - single page PWA-style prototype
+
+    What this file does:
+    - Captures one or more photos on phone/tablet.
+    - Applies a consistent filename structure using a phrase + date/time + sequence suffix.
+    - Stores the active project locally using IndexedDB.
+    - Allows a paragraph of notes beside each photo.
+    - Generates a report PDF when Complete is pressed.
+    - Lets the user choose a device folder for saving project outputs where supported.
+    - Writes photos, note files, manifest JSON and final report PDF into a project folder.
+    - Falls back to normal browser downloads when folder picking is not supported.
+
+    Optional PWA service worker:
+    - This single file includes manifest metadata, but true offline install behaviour should use a real sw.js file.
+    - Near the bottom of this file there is a service worker registration attempt for ./sw.js.
+  -->
+
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #0b1120;
+      --bg-soft: #111827;
+      --panel: rgba(17, 24, 39, 0.84);
+      --panel-strong: rgba(15, 23, 42, 0.96);
+      --card: rgba(255, 255, 255, 0.075);
+      --card-strong: rgba(255, 255, 255, 0.11);
+      --line: rgba(255, 255, 255, 0.13);
+      --line-strong: rgba(255, 255, 255, 0.2);
+      --text: #f8fafc;
+      --muted: #a7b3c7;
+      --muted-2: #7e8da8;
+      --blue: #38bdf8;
+      --blue-strong: #0284c7;
+      --purple: #a78bfa;
+      --pink: #f0abfc;
+      --green: #34d399;
+      --amber: #fbbf24;
+      --red: #fb7185;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --radius-sm: 10px;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 10% 5%, rgba(56, 189, 248, 0.22), transparent 34rem),
+        radial-gradient(circle at 90% 0%, rgba(167, 139, 250, 0.28), transparent 32rem),
+        linear-gradient(135deg, #08111f 0%, #101827 45%, #120e22 100%);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -12rem -10rem auto -10rem;
+      height: 32rem;
+      background:
+        linear-gradient(90deg, rgba(56, 189, 248, 0.16), rgba(167, 139, 250, 0.18), rgba(240, 171, 252, 0.12)),
+        radial-gradient(circle at 40% 10%, rgba(255,255,255,0.22), transparent 13rem);
+      filter: blur(30px);
+      opacity: 0.9;
+      z-index: -2;
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.032) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.032) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,0.75), transparent 75%);
+      z-index: -1;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .app-shell {
+      width: min(1180px, calc(100vw - 28px));
+      margin: 0 auto;
+      padding: 22px 0 calc(96px + var(--safe-bottom));
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.11), rgba(255,255,255,0.04)),
+        rgba(15, 23, 42, 0.74);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      padding: clamp(22px, 4vw, 42px);
+      min-height: 260px;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -80px;
+      bottom: -115px;
+      width: 380px;
+      height: 380px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.11);
+      background:
+        radial-gradient(circle at 34% 34%, rgba(56,189,248,0.42), transparent 11rem),
+        radial-gradient(circle at 64% 62%, rgba(167,139,250,0.35), transparent 10rem);
+      opacity: 0.78;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      position: relative;
+      z-index: 2;
+      margin-bottom: 34px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .mark {
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(135deg, rgba(56,189,248,1), rgba(167,139,250,1));
+      color: white;
+      box-shadow: 0 14px 35px rgba(56,189,248,0.24);
+      flex: 0 0 auto;
+    }
+
+    .mark svg {
+      width: 27px;
+      height: 27px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: clamp(1.15rem, 2.6vw, 1.65rem);
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+
+    .brand p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 0.91rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .swm-logo {
+      width: 78px;
+      height: 48px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.22), rgba(167, 139, 250, 0.22));
+      border: 1px solid rgba(255,255,255,0.18);
+      box-shadow: 0 14px 36px rgba(0,0,0,0.22);
+    }
+
+    .swm-logo::before {
+      content: "";
+      position: absolute;
+      inset: -50% -22%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
+      transform: rotate(22deg);
+    }
+
+    .swm-logo span {
+      position: relative;
+      z-index: 1;
+      font-weight: 950;
+      font-size: 1.08rem;
+      letter-spacing: -0.045em;
+      background: linear-gradient(90deg, #7dd3fc, #c4b5fd, #f0abfc);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 0 22px rgba(56,189,248,0.22);
+    }
+
+
+    .status-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.07);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 8px 11px;
+      font-size: 0.82rem;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted-2);
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.06);
+    }
+
+    .dot.good { background: var(--green); }
+    .dot.warn { background: var(--amber); }
+    .dot.bad { background: var(--red); }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(310px, 0.65fr);
+      gap: clamp(22px, 5vw, 48px);
+      align-items: end;
+      position: relative;
+      z-index: 2;
+    }
+
+    .hero-copy h2 {
+      font-size: clamp(2.05rem, 7vw, 4.4rem);
+      letter-spacing: -0.075em;
+      line-height: 0.96;
+      margin: 0 0 18px;
+      max-width: 780px;
+    }
+
+    .gradient-text {
+      background: linear-gradient(90deg, #e0f2fe, #bae6fd 25%, #ddd6fe 68%, #f5d0fe);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .hero-copy p {
+      color: #d7deea;
+      font-size: clamp(1rem, 2vw, 1.16rem);
+      line-height: 1.65;
+      margin: 0;
+      max-width: 710px;
+    }
+
+    .quick-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 24px;
+      max-width: 620px;
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.065);
+      border-radius: 18px;
+      padding: 14px 13px;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 1.35rem;
+      letter-spacing: -0.04em;
+    }
+
+    .stat span {
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .hero-panel {
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 26px;
+      background: rgba(5, 9, 18, 0.34);
+      padding: 16px;
+      backdrop-filter: blur(12px);
+    }
+
+    .mini-report {
+      border: 1px solid rgba(255,255,255,0.13);
+      border-radius: 22px;
+      padding: 16px;
+      background: rgba(255,255,255,0.08);
+    }
+
+    .mini-report .mock-photo {
+      height: 170px;
+      border-radius: 18px;
+      background:
+        linear-gradient(135deg, rgba(56,189,248,0.25), rgba(167,139,250,0.2)),
+        linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.12);
+      display: grid;
+      place-items: center;
+      color: rgba(255,255,255,0.82);
+    }
+
+    .mini-report .lines {
+      display: grid;
+      gap: 8px;
+      margin-top: 15px;
+    }
+
+    .line {
+      height: 9px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.17);
+    }
+
+    .line:nth-child(2) { width: 82%; }
+    .line:nth-child(3) { width: 58%; }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+      gap: 18px;
+      margin-top: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 18px 70px rgba(0,0,0,0.20);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 20px 20px 0;
+    }
+
+    .panel-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .panel-title h3 {
+      margin: 0;
+      font-size: 1.1rem;
+      letter-spacing: -0.035em;
+    }
+
+    .panel-header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.55;
+    }
+
+    .panel-body {
+      padding: 18px 20px 20px;
+    }
+
+    .form-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+    }
+
+    label {
+      color: #dce6f4;
+      font-size: 0.84rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 13px 14px;
+      font: inherit;
+      outline: none;
+      transition: border 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+      color: rgba(203,213,225,0.56);
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: rgba(56,189,248,0.72);
+      box-shadow: 0 0 0 4px rgba(56,189,248,0.14);
+      background: rgba(255,255,255,0.105);
+    }
+
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+      line-height: 1.45;
+    }
+
+    .hint {
+      color: var(--muted-2);
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 2px;
+    }
+
+    button,
+    .button-like {
+      appearance: none;
+      border: 0;
+      border-radius: 15px;
+      padding: 12px 15px;
+      font: inherit;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: white;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.13);
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: transform 0.16s ease, filter 0.16s ease, border 0.16s ease, background 0.16s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      min-height: 46px;
+      text-decoration: none;
+    }
+
+    button:hover,
+    .button-like:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+      border-color: rgba(255,255,255,0.24);
+    }
+
+    button:active,
+    .button-like:active {
+      transform: translateY(0);
+      filter: brightness(0.96);
+    }
+
+    button:disabled {
+      opacity: 0.48;
+      cursor: not-allowed;
+      transform: none;
+      filter: none;
+    }
+
+    .primary {
+      background: linear-gradient(135deg, #0284c7, #7c3aed);
+      box-shadow: 0 14px 30px rgba(56, 189, 248, 0.15);
+      border-color: rgba(255,255,255,0.18);
+    }
+
+    .success {
+      background: linear-gradient(135deg, #059669, #0284c7);
+      border-color: rgba(255,255,255,0.18);
+    }
+
+    .danger {
+      background: rgba(251, 113, 133, 0.13);
+      color: #fecdd3;
+      border-color: rgba(251, 113, 133, 0.26);
+    }
+
+    .ghost {
+      background: rgba(255,255,255,0.07);
+    }
+
+    .wide {
+      width: 100%;
+    }
+
+    .settings {
+      margin-top: 18px;
+      border-top: 1px solid var(--line);
+      padding-top: 18px;
+    }
+
+    details {
+      border: 1px solid rgba(255,255,255,0.11);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.045);
+      overflow: hidden;
+    }
+
+    summary {
+      cursor: pointer;
+      list-style: none;
+      padding: 15px 16px;
+      font-weight: 800;
+      color: #e8eef8;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      user-select: none;
+    }
+
+    summary::-webkit-details-marker {
+      display: none;
+    }
+
+    summary::after {
+      content: "⌄";
+      color: var(--muted);
+      transition: transform 0.16s ease;
+    }
+
+    details[open] summary::after {
+      transform: rotate(180deg);
+    }
+
+    .details-body {
+      padding: 0 16px 16px;
+    }
+
+    .active-project {
+      min-height: 540px;
+    }
+
+    .project-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,0.035);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      backdrop-filter: blur(16px);
+    }
+
+    .project-heading {
+      min-width: 0;
+    }
+
+    .project-heading h3 {
+      margin: 0;
+      font-size: 1.14rem;
+      letter-spacing: -0.04em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .project-heading p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .toolbar-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .empty-state {
+      padding: 50px 20px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: var(--muted);
+      min-height: 460px;
+    }
+
+    .empty-card {
+      max-width: 440px;
+      border: 1px dashed rgba(255,255,255,0.20);
+      border-radius: 28px;
+      padding: 28px;
+      background: rgba(255,255,255,0.04);
+    }
+
+    .empty-icon {
+      width: 74px;
+      height: 74px;
+      margin: 0 auto 16px;
+      border-radius: 24px;
+      background: rgba(56,189,248,0.12);
+      display: grid;
+      place-items: center;
+      color: #bae6fd;
+      border: 1px solid rgba(56,189,248,0.22);
+    }
+
+    .empty-card h3 {
+      margin: 0 0 8px;
+      color: var(--text);
+      font-size: 1.35rem;
+      letter-spacing: -0.045em;
+    }
+
+    .empty-card p {
+      margin: 0 0 18px;
+      line-height: 1.6;
+    }
+
+    #photoInput {
+      position: absolute;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .cards {
+      display: grid;
+      gap: 16px;
+      padding: 18px;
+    }
+
+    .photo-card {
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr);
+      gap: 16px;
+      border: 1px solid rgba(255,255,255,0.13);
+      border-radius: 24px;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.035));
+      padding: 14px;
+    }
+
+    .photo-preview {
+      position: relative;
+      min-height: 190px;
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(0,0,0,0.24);
+      border: 1px solid rgba(255,255,255,0.10);
+    }
+
+    .photo-preview img {
+      width: 100%;
+      height: 100%;
+      min-height: 190px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .seq-badge {
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      background: rgba(15,23,42,0.82);
+      border: 1px solid rgba(255,255,255,0.16);
+      backdrop-filter: blur(10px);
+      color: white;
+      border-radius: 999px;
+      padding: 7px 9px;
+      font-size: 0.78rem;
+      font-weight: 900;
+    }
+
+    .card-content {
+      min-width: 0;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .filename {
+      font-size: 0.92rem;
+      font-weight: 850;
+      overflow-wrap: anywhere;
+      line-height: 1.35;
+    }
+
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .note-box {
+      min-height: 130px;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .toast-wrap {
+      position: fixed;
+      left: 50%;
+      bottom: calc(20px + var(--safe-bottom));
+      transform: translateX(-50%);
+      width: min(620px, calc(100vw - 28px));
+      z-index: 50;
+      display: grid;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .toast {
+      pointer-events: auto;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 18px;
+      background: rgba(15, 23, 42, 0.95);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      backdrop-filter: blur(18px);
+      padding: 13px 15px;
+      color: #e8eef8;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      animation: toastIn 0.2s ease both;
+    }
+
+    .toast strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .toast p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.35;
+    }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .progress {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.1);
+      overflow: hidden;
+      margin-top: 12px;
+      display: none;
+    }
+
+    .progress.is-visible {
+      display: block;
+    }
+
+    .progress span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--blue), var(--purple));
+      border-radius: inherit;
+      transition: width 0.2s ease;
+    }
+
+    .footer-note {
+      margin: 18px 2px 0;
+      color: var(--muted-2);
+      font-size: 0.78rem;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .install-nudge {
+      display: none;
+      margin-top: 14px;
+      border: 1px solid rgba(56,189,248,0.22);
+      background: rgba(56,189,248,0.09);
+      color: #dff7ff;
+      border-radius: 18px;
+      padding: 13px 14px;
+      line-height: 1.45;
+      font-size: 0.88rem;
+    }
+
+    .install-nudge.is-visible {
+      display: block;
+    }
+
+    .checkbox-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .checkbox-row input {
+      width: 18px;
+      height: 18px;
+      accent-color: #38bdf8;
+      flex: 0 0 auto;
+    }
+
+    .small-button {
+      min-height: 38px;
+      padding: 9px 11px;
+      border-radius: 12px;
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    @media (max-width: 980px) {
+      .hero-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-panel {
+        display: none;
+      }
+
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      .project-toolbar {
+        position: static;
+      }
+    }
+
+    @media (max-width: 700px) {
+      .app-shell {
+        width: min(100vw - 18px, 1180px);
+        padding-top: 9px;
+      }
+
+      .hero {
+        padding: 18px;
+        border-radius: 24px;
+      }
+
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        margin-bottom: 28px;
+      }
+
+      .status-row {
+        justify-content: flex-start;
+      }
+
+      .quick-stats {
+        grid-template-columns: 1fr;
+      }
+
+      .project-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .toolbar-buttons {
+        justify-content: flex-start;
+      }
+
+      .photo-card {
+        grid-template-columns: 1fr;
+      }
+
+      .photo-preview,
+      .photo-preview img {
+        min-height: 240px;
+      }
+
+      .button-row button,
+      .button-row .button-like,
+      .toolbar-buttons button,
+      .toolbar-buttons .button-like {
+        flex: 1 1 auto;
+      }
+    }
+
+    @media print {
+      body {
+        background: white;
+        color: black;
+      }
+
+      .app-shell {
+        width: auto;
+        padding: 0;
+      }
+
+      .hero,
+      aside,
+      .project-toolbar,
+      .toast-wrap,
+      .footer-note {
+        display: none !important;
+      }
+
+      main {
+        display: block;
+        margin: 0;
+      }
+
+      .panel {
+        box-shadow: none;
+        border: 0;
+        background: white;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-shell">
+    <header class="hero">
+      <div class="topbar">
+        <div class="brand">
+          <div class="swm-logo" aria-label="Shane Ward Music logo"><span>SWM</span></div>
+          <div class="mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M7 7.4c0-1.33 1.08-2.4 2.4-2.4h5.2c1.32 0 2.4 1.07 2.4 2.4v.72h1.12c1.04 0 1.88.84 1.88 1.88v6.72c0 1.04-.84 1.88-1.88 1.88H5.88A1.88 1.88 0 0 1 4 16.72V10c0-1.04.84-1.88 1.88-1.88H7V7.4Z" stroke="currentColor" stroke-width="1.7"/>
+              <path d="M12 16.2a3.15 3.15 0 1 0 0-6.3 3.15 3.15 0 0 0 0 6.3Z" stroke="currentColor" stroke-width="1.7"/>
+              <path d="M17.35 10.05h.02" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div>
+            <h1>JScan Photo Report</h1>
+            <p>Capture, annotate, report and archive.</p>
+          </div>
+        </div>
+
+        <div class="status-row">
+          <span class="pill" id="onlinePill"><span class="dot" id="onlineDot"></span><span id="onlineText">Checking network</span></span>
+          <span class="pill" id="storagePill"><span class="dot warn" id="storageDot"></span><span id="storageText">No folder selected</span></span>
+        </div>
+      </div>
+
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <h2><span class="gradient-text">Fast photo reports</span> from the field.</h2>
+          <p>
+            Start a project, take multiple photos, add notes beside each one, then generate a clean PDF report.
+            Your photos, note files, manifest and final report can be saved into a device folder where browser support allows it, with download fallback when it does not.
+          </p>
+
+          <div class="quick-stats">
+            <div class="stat">
+              <strong id="statPhotos">0</strong>
+              <span>Photos in project</span>
+            </div>
+            <div class="stat">
+              <strong id="statNotes">0</strong>
+              <span>Notes completed</span>
+            </div>
+            <div class="stat">
+              <strong id="statStorage">Local</strong>
+              <span>Storage mode</span>
+            </div>
+          </div>
+
+          <div class="install-nudge" id="installNudge">
+            For the best phone experience, serve this over HTTPS and add it to your home screen. Camera capture and folder saving work best from a proper HTTPS web address or localhost, not a local file preview.
+          </div>
+        </div>
+
+        <div class="hero-panel" aria-hidden="true">
+          <div class="mini-report">
+            <div class="mock-photo">
+              <svg width="62" height="62" viewBox="0 0 24 24" fill="none">
+                <path d="M4.75 7.25A2.5 2.5 0 0 1 7.25 4.75h9.5a2.5 2.5 0 0 1 2.5 2.5v9.5a2.5 2.5 0 0 1-2.5 2.5h-9.5a2.5 2.5 0 0 1-2.5-2.5v-9.5Z" stroke="currentColor" stroke-width="1.4"/>
+                <path d="m5.5 16 3.15-3.15a1.35 1.35 0 0 1 1.9 0L13 15.3l1.2-1.2a1.35 1.35 0 0 1 1.9 0L18.7 16.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                <path d="M15.8 9.2h.02" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="lines">
+              <div class="line"></div>
+              <div class="line"></div>
+              <div class="line"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <aside class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <h3>Project setup</h3>
+          </div>
+          <p>Create a project name and a base filename phrase. Each photo gets a timestamp and sequence number.</p>
+        </div>
+
+        <div class="panel-body">
+          <div class="form-grid">
+            <div class="field">
+              <label for="projectTitle">Project / Report Title</label>
+              <input id="projectTitle" type="text" placeholder="Example: Southside Field Inspection" autocomplete="off" />
+            </div>
+
+            <div class="field">
+              <label for="filePhrase">Filename Word or Phrase</label>
+              <input id="filePhrase" type="text" placeholder="Example: southside inspection" autocomplete="off" />
+              <div class="hint" id="filenamePreview">Preview: southside_inspection_YYYY-MM-DD_HHMMSS_001.jpg</div>
+            </div>
+
+            <div class="field">
+              <label for="reportAuthor">Prepared By</label>
+              <input id="reportAuthor" type="text" placeholder="Optional" autocomplete="name" />
+            </div>
+
+            <div class="field">
+              <label for="projectFolderName">Project Folder Name</label>
+              <input id="projectFolderName" type="text" value="JScan Reports" autocomplete="off" />
+              <div class="hint">When Complete is pressed, a project subfolder is created inside your selected save location.</div>
+            </div>
+
+            <div class="button-row">
+              <button class="primary wide" id="startProjectBtn" type="button">
+                <span>Start New Project</span>
+              </button>
+              <button class="ghost wide" id="loadLastProjectBtn" type="button">
+                <span>Load Last Project</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="settings">
+            <details open>
+              <summary>Storage settings</summary>
+              <div class="details-body form-grid">
+                <div class="field">
+                  <label>Save Location</label>
+                  <button id="chooseFolderBtn" type="button" class="primary wide">Choose Save Folder</button>
+                  <div class="hint" id="storageHint">No folder selected yet. On supported browsers, you can choose or create a folder using the device picker.</div>
+                </div>
+
+                <label class="checkbox-row">
+                  <input id="saveOnComplete" type="checkbox" checked />
+                  <span>Save photos, notes, manifest and PDF when Complete is pressed</span>
+                </label>
+
+                <div class="button-row">
+                  <button id="saveSettingsBtn" type="button" class="ghost">Save Settings</button>
+                  <button id="forgetFolderBtn" type="button" class="ghost">Forget Folder</button>
+                </div>
+
+                <div class="hint">
+                  Folder picking uses the browser File System Access API. If the browser does not support it, the app will fall back to normal downloads.
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div class="settings">
+            <details>
+              <summary>Local data tools</summary>
+              <div class="details-body form-grid">
+                <button id="downloadJsonBtn" type="button" class="ghost">Download Project JSON</button>
+                <button id="clearProjectBtn" type="button" class="danger">Clear Current Project</button>
+                <div class="hint">Photos and notes are stored in this browser on this device until you clear them.</div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </aside>
+
+      <section class="panel active-project">
+        <div class="project-toolbar">
+          <div class="project-heading">
+            <h3 id="currentProjectTitle">No active project</h3>
+            <p id="currentProjectMeta">Start a project to begin capturing photos.</p>
+          </div>
+          <div class="toolbar-buttons">
+            <label class="button-like primary" for="photoInput" id="addPhotoLabel">
+              Add Photo
+            </label>
+            <button class="ghost" id="generatePdfBtn" type="button">Generate PDF</button>
+            <button class="success" id="completeBtn" type="button">Complete</button>
+          </div>
+        </div>
+
+        <input id="photoInput" type="file" accept="image/*" capture="environment" multiple />
+
+        <div id="emptyState" class="empty-state">
+          <div class="empty-card">
+            <div class="empty-icon">
+              <svg width="38" height="38" viewBox="0 0 24 24" fill="none">
+                <path d="M7.25 5h9.5A2.25 2.25 0 0 1 19 7.25v9.5A2.25 2.25 0 0 1 16.75 19h-9.5A2.25 2.25 0 0 1 5 16.75v-9.5A2.25 2.25 0 0 1 7.25 5Z" stroke="currentColor" stroke-width="1.55"/>
+                <path d="M8 16l2.1-2.1a1.3 1.3 0 0 1 1.84 0L13 14.96l.9-.9a1.3 1.3 0 0 1 1.84 0L18 16.32" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"/>
+                <path d="M15.25 8.75h.02" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <h3>Ready when you are</h3>
+            <p>Start a project on the left, then use Add Photo to capture images and notes for your report.</p>
+            <button class="primary" type="button" onclick="document.getElementById('projectTitle').focus()">Set up project</button>
+          </div>
+        </div>
+
+        <div class="cards" id="cards"></div>
+        <div class="progress" id="progress"><span id="progressBar"></span></div>
+      </section>
+    </main>
+
+    <p class="footer-note">
+      Prototype note: folder picking requires File System Access API support. If unavailable, the app still works for capture, local storage and downloadable PDF/report files.
+    </p>
+  </div>
+
+  <div class="toast-wrap" id="toastWrap" aria-live="polite" aria-atomic="true"></div>
+
+  <script>
+    "use strict";
+
+    const DB_NAME = "JScanPhotoReportDB";
+    const DB_VERSION = 1;
+    const PROJECT_STORE = "projects";
+    const ITEM_STORE = "items";
+
+    const el = {
+      onlinePill: document.getElementById("onlinePill"),
+      onlineDot: document.getElementById("onlineDot"),
+      onlineText: document.getElementById("onlineText"),
+      storageDot: document.getElementById("storageDot"),
+      storageText: document.getElementById("storageText"),
+      statPhotos: document.getElementById("statPhotos"),
+      statNotes: document.getElementById("statNotes"),
+      statStorage: document.getElementById("statStorage"),
+      installNudge: document.getElementById("installNudge"),
+
+      projectTitle: document.getElementById("projectTitle"),
+      filePhrase: document.getElementById("filePhrase"),
+      reportAuthor: document.getElementById("reportAuthor"),
+      projectFolderName: document.getElementById("projectFolderName"),
+      filenamePreview: document.getElementById("filenamePreview"),
+      storageHint: document.getElementById("storageHint"),
+      saveOnComplete: document.getElementById("saveOnComplete"),
+
+      startProjectBtn: document.getElementById("startProjectBtn"),
+      loadLastProjectBtn: document.getElementById("loadLastProjectBtn"),
+      saveSettingsBtn: document.getElementById("saveSettingsBtn"),
+      chooseFolderBtn: document.getElementById("chooseFolderBtn"),
+      forgetFolderBtn: document.getElementById("forgetFolderBtn"),
+      clearProjectBtn: document.getElementById("clearProjectBtn"),
+      downloadJsonBtn: document.getElementById("downloadJsonBtn"),
+
+      currentProjectTitle: document.getElementById("currentProjectTitle"),
+      currentProjectMeta: document.getElementById("currentProjectMeta"),
+      photoInput: document.getElementById("photoInput"),
+      addPhotoLabel: document.getElementById("addPhotoLabel"),
+      generatePdfBtn: document.getElementById("generatePdfBtn"),
+      completeBtn: document.getElementById("completeBtn"),
+      emptyState: document.getElementById("emptyState"),
+      cards: document.getElementById("cards"),
+      progress: document.getElementById("progress"),
+      progressBar: document.getElementById("progressBar"),
+      toastWrap: document.getElementById("toastWrap")
+    };
+
+    let db = null;
+    let currentProject = null;
+    let currentItems = [];
+    let storageHandle = null;
+    let pendingObjectUrls = [];
+
+    init();
+
+    async function init() {
+      wireEvents();
+      initManifest();
+      await openDb();
+      await loadSettings();
+      await loadStoredFolderHandle();
+      updateOnlineStatus();
+      updateUiState();
+
+      const lastId = localStorage.getItem("jscan.lastProjectId");
+      if (lastId) {
+        await loadProject(lastId, { silent: true });
+      }
+
+      setTimeout(() => {
+        if (location.protocol === "file:") {
+          el.installNudge.classList.add("is-visible");
+        }
+      }, 600);
+
+      tryRegisterServiceWorker();
+    }
+
+    function wireEvents() {
+      window.addEventListener("online", updateOnlineStatus);
+      window.addEventListener("offline", updateOnlineStatus);
+
+      el.filePhrase.addEventListener("input", updateFilenamePreview);
+
+      el.startProjectBtn.addEventListener("click", startNewProject);
+      el.loadLastProjectBtn.addEventListener("click", async () => {
+        const lastId = localStorage.getItem("jscan.lastProjectId");
+        if (!lastId) {
+          toast("No previous project", "There is no saved project on this device yet.", "warn");
+          return;
+        }
+        await loadProject(lastId);
+      });
+
+      el.photoInput.addEventListener("change", handlePhotoInput);
+      el.generatePdfBtn.addEventListener("click", async () => generateReportPdf({ download: true }));
+      el.completeBtn.addEventListener("click", completeProject);
+
+      el.saveSettingsBtn.addEventListener("click", saveSettings);
+      el.chooseFolderBtn.addEventListener("click", chooseStorageFolder);
+      el.forgetFolderBtn.addEventListener("click", forgetStorageFolder);
+      el.clearProjectBtn.addEventListener("click", clearCurrentProject);
+      el.downloadJsonBtn.addEventListener("click", downloadProjectJson);
+
+      updateFilenamePreview();
+    }
+
+    function initManifest() {
+      const manifest = {
+        name: "JScan Photo Report",
+        short_name: "JScan",
+        start_url: ".",
+        display: "standalone",
+        background_color: "#0b1120",
+        theme_color: "#111827",
+        description: "Capture annotated photos and generate report PDFs.",
+        icons: [
+          {
+            src: "data:image/svg+xml," + encodeURIComponent(`
+              <svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+                <defs>
+                  <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#38bdf8"/>
+                    <stop offset="1" stop-color="#7c3aed"/>
+                  </linearGradient>
+                </defs>
+                <rect width="192" height="192" rx="42" fill="url(#g)"/>
+                <path d="M54 67c0-11 9-20 20-20h44c11 0 20 9 20 20v5h13c9 0 16 7 16 16v49c0 9-7 16-16 16H41c-9 0-16-7-16-16V88c0-9 7-16 16-16h13v-5Z" fill="none" stroke="white" stroke-width="10"/>
+                <circle cx="96" cy="113" r="27" fill="none" stroke="white" stroke-width="10"/>
+              </svg>
+            `),
+            sizes: "192x192",
+            type: "image/svg+xml",
+            purpose: "any maskable"
+          }
+        ]
+      };
+
+      const blob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("link");
+      link.rel = "manifest";
+      link.href = url;
+      document.head.appendChild(link);
+    }
+
+    function tryRegisterServiceWorker() {
+      if (!("serviceWorker" in navigator)) return;
+      if (!["http:", "https:"].includes(location.protocol)) return;
+
+      navigator.serviceWorker.register("./sw.js").catch(() => {
+        // This is intentionally quiet. Add a real sw.js later for full offline PWA behaviour.
+      });
+    }
+
+    async function loadSettings() {
+      el.projectFolderName.value = localStorage.getItem("jscan.projectFolderName") || "JScan Reports";
+      el.reportAuthor.value = localStorage.getItem("jscan.reportAuthor") || "";
+      el.saveOnComplete.checked = localStorage.getItem("jscan.saveOnComplete") !== "false";
+    }
+
+    async function saveSettings() {
+      localStorage.setItem("jscan.projectFolderName", el.projectFolderName.value.trim() || "JScan Reports");
+      localStorage.setItem("jscan.reportAuthor", el.reportAuthor.value.trim());
+      localStorage.setItem("jscan.saveOnComplete", String(el.saveOnComplete.checked));
+      await saveStorageHandleIfPresent();
+      updateStorageStatus();
+      toast("Settings saved", "Your local settings have been updated.", "good");
+    }
+
+    async function loadStoredFolderHandle() {
+      try {
+        const handle = await idbGet(PROJECT_STORE, "__storage_handle__");
+        storageHandle = handle && handle.handle ? handle.handle : null;
+      } catch (error) {
+        storageHandle = null;
+      }
+      updateStorageStatus();
+    }
+
+    async function saveStorageHandleIfPresent() {
+      if (!storageHandle) return;
+      await idbPut(PROJECT_STORE, { id: "__storage_handle__", handle: storageHandle, savedAt: new Date().toISOString() });
+    }
+
+    async function chooseStorageFolder() {
+      if (!window.showDirectoryPicker) {
+        toast("Folder picker unavailable", "This browser does not support choosing a save folder. The app will use downloads instead.", "warn");
+        updateStorageStatus();
+        return;
+      }
+
+      try {
+        storageHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+        await saveStorageHandleIfPresent();
+        updateStorageStatus();
+        toast("Folder selected", `Saving to ${storageHandle.name}.`, "good");
+      } catch (error) {
+        if (error && error.name === "AbortError") return;
+        console.error(error);
+        toast("Folder selection failed", "The save folder could not be selected.", "bad");
+      }
+    }
+
+    async function forgetStorageFolder() {
+      storageHandle = null;
+      await idbDelete(PROJECT_STORE, "__storage_handle__");
+      updateStorageStatus();
+      toast("Folder forgotten", "The app will use normal browser downloads until a folder is chosen.", "good");
+    }
+
+    async function openDb() {
+      db = await new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+
+        req.onupgradeneeded = () => {
+          const database = req.result;
+
+          if (!database.objectStoreNames.contains(PROJECT_STORE)) {
+            database.createObjectStore(PROJECT_STORE, { keyPath: "id" });
+          }
+
+          if (!database.objectStoreNames.contains(ITEM_STORE)) {
+            const store = database.createObjectStore(ITEM_STORE, { keyPath: "id" });
+            store.createIndex("projectId", "projectId", { unique: false });
+          }
+        };
+
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function tx(storeName, mode = "readonly") {
+      return db.transaction(storeName, mode).objectStore(storeName);
+    }
+
+    function idbPut(storeName, value) {
+      return new Promise((resolve, reject) => {
+        const req = tx(storeName, "readwrite").put(value);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function idbGet(storeName, key) {
+      return new Promise((resolve, reject) => {
+        const req = tx(storeName).get(key);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function idbDelete(storeName, key) {
+      return new Promise((resolve, reject) => {
+        const req = tx(storeName, "readwrite").delete(key);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function idbGetItemsByProject(projectId) {
+      return new Promise((resolve, reject) => {
+        const store = tx(ITEM_STORE);
+        const index = store.index("projectId");
+        const req = index.getAll(projectId);
+        req.onsuccess = () => {
+          const items = req.result || [];
+          items.sort((a, b) => a.sequence - b.sequence);
+          resolve(items);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function startNewProject() {
+      const title = el.projectTitle.value.trim();
+      const phrase = el.filePhrase.value.trim() || title;
+
+      if (!title && !phrase) {
+        toast("Project needs a name", "Enter a project title or filename phrase first.", "warn");
+        el.projectTitle.focus();
+        return;
+      }
+
+      const createdAt = new Date().toISOString();
+      const basePhrase = safeFileStem(phrase || "jscan_photo");
+      const projectId = `${basePhrase}_${formatDateTimeForFile(new Date())}`;
+
+      currentProject = {
+        id: projectId,
+        title: title || phrase || "Untitled Report",
+        basePhrase,
+        originalPhrase: phrase || title || "JScan Photo",
+        author: el.reportAuthor.value.trim(),
+        projectFolderName: el.projectFolderName.value.trim() || "JScan Reports",
+        createdAt,
+        completedAt: null,
+        nextSequence: 1
+      };
+
+      currentItems = [];
+      await idbPut(PROJECT_STORE, currentProject);
+      localStorage.setItem("jscan.lastProjectId", currentProject.id);
+      localStorage.setItem("jscan.reportAuthor", currentProject.author);
+      localStorage.setItem("jscan.projectFolderName", currentProject.projectFolderName);
+
+      await renderProject();
+      toast("Project started", "You can now add photos and notes.", "good");
+    }
+
+    async function loadProject(projectId, opts = {}) {
+      const project = await idbGet(PROJECT_STORE, projectId);
+      if (!project) {
+        if (!opts.silent) toast("Project not found", "The saved project could not be loaded.", "bad");
+        updateUiState();
+        return;
+      }
+
+      currentProject = project;
+      currentItems = await idbGetItemsByProject(project.id);
+
+      el.projectTitle.value = currentProject.title || "";
+      el.filePhrase.value = currentProject.originalPhrase || currentProject.basePhrase || "";
+      el.reportAuthor.value = currentProject.author || "";
+      el.projectFolderName.value = currentProject.projectFolderName || "JScan Reports";
+
+      localStorage.setItem("jscan.lastProjectId", currentProject.id);
+      updateFilenamePreview();
+      await renderProject();
+
+      if (!opts.silent) toast("Project loaded", `${currentItems.length} photo item${currentItems.length === 1 ? "" : "s"} loaded.`, "good");
+    }
+
+    async function saveProject() {
+      if (!currentProject) return;
+      await idbPut(PROJECT_STORE, currentProject);
+    }
+
+    function updateFilenamePreview() {
+      const stem = safeFileStem(el.filePhrase.value.trim() || el.projectTitle.value.trim() || "jscan_photo");
+      el.filenamePreview.textContent = `Preview: ${stem}_YYYY-MM-DD_HHMMSS_001.jpg`;
+    }
+
+    async function handlePhotoInput(event) {
+      if (!currentProject) {
+        toast("Start a project first", "Create or load a project before adding photos.", "warn");
+        event.target.value = "";
+        return;
+      }
+
+      const files = Array.from(event.target.files || []);
+      if (!files.length) return;
+
+      setBusy(true, "Preparing photos");
+
+      try {
+        for (const file of files) {
+          if (!file.type.startsWith("image/")) continue;
+
+          const sequence = currentProject.nextSequence++;
+          const capturedAt = new Date();
+          const fileName = buildPhotoFileName(currentProject.basePhrase, capturedAt, sequence);
+          const compressed = await compressImage(file, 1800, 0.86);
+
+          const item = {
+            id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+            projectId: currentProject.id,
+            sequence,
+            fileName,
+            capturedAt: capturedAt.toISOString(),
+            note: "",
+            mimeType: compressed.type || "image/jpeg",
+            size: compressed.size,
+            blob: compressed
+          };
+
+          await idbPut(ITEM_STORE, item);
+          updateProgress(Math.min(94, (sequence / (sequence + files.length)) * 100));
+        }
+
+        await saveProject();
+        currentItems = await idbGetItemsByProject(currentProject.id);
+        await renderProject();
+        toast("Photo added", `${files.length} photo${files.length === 1 ? "" : "s"} added to the project.`, "good");
+      } catch (error) {
+        console.error(error);
+        toast("Photo error", "Something went wrong while saving the photo locally.", "bad");
+      } finally {
+        event.target.value = "";
+        setBusy(false);
+      }
+    }
+
+    function buildPhotoFileName(stem, date, sequence) {
+      return `${safeFileStem(stem)}_${formatDateTimeForFile(date)}_${String(sequence).padStart(3, "0")}.jpg`;
+    }
+
+    function safeFileStem(value) {
+      return String(value || "jscan_photo")
+        .trim()
+        .toLowerCase()
+        .replace(/['"]/g, "")
+        .replace(/&/g, "and")
+        .replace(/[^a-z0-9]+/gi, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 72) || "jscan_photo";
+    }
+
+    function formatDateTimeForFile(date) {
+      const d = date instanceof Date ? date : new Date(date);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mi = String(d.getMinutes()).padStart(2, "0");
+      const ss = String(d.getSeconds()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}_${hh}${mi}${ss}`;
+    }
+
+    function niceDateTime(value) {
+      const d = new Date(value);
+      return d.toLocaleString("en-AU", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    }
+
+    async function compressImage(file, maxDimension = 1800, quality = 0.86) {
+      const img = await blobToImage(file);
+      let { width, height } = img;
+
+      const scale = Math.min(1, maxDimension / Math.max(width, height));
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext("2d", { alpha: false });
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+
+      return await new Promise((resolve) => {
+        canvas.toBlob((blob) => resolve(blob || file), "image/jpeg", quality);
+      });
+    }
+
+    function blobToImage(blob) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          resolve(img);
+        };
+        img.onerror = (e) => {
+          URL.revokeObjectURL(url);
+          reject(e);
+        };
+        img.src = url;
+      });
+    }
+
+    async function renderProject() {
+      releaseObjectUrls();
+
+      if (!currentProject) {
+        el.currentProjectTitle.textContent = "No active project";
+        el.currentProjectMeta.textContent = "Start a project to begin capturing photos.";
+        el.emptyState.style.display = "";
+        el.cards.innerHTML = "";
+        updateUiState();
+        return;
+      }
+
+      el.currentProjectTitle.textContent = currentProject.title || "Untitled Report";
+      const metaParts = [
+        `Created ${niceDateTime(currentProject.createdAt)}`,
+        `${currentItems.length} photo${currentItems.length === 1 ? "" : "s"}`
+      ];
+      if (currentProject.completedAt) metaParts.push(`Completed ${niceDateTime(currentProject.completedAt)}`);
+      el.currentProjectMeta.textContent = metaParts.join(" • ");
+
+      el.emptyState.style.display = currentItems.length ? "none" : "";
+      el.cards.innerHTML = "";
+
+      for (const item of currentItems) {
+        el.cards.appendChild(await createPhotoCard(item));
+      }
+
+      updateUiState();
+    }
+
+    async function createPhotoCard(item) {
+      const card = document.createElement("article");
+      card.className = "photo-card";
+      card.dataset.id = item.id;
+
+      const url = URL.createObjectURL(item.blob);
+      pendingObjectUrls.push(url);
+
+      card.innerHTML = `
+        <div class="photo-preview">
+          <span class="seq-badge">#${String(item.sequence).padStart(3, "0")}</span>
+          <img alt="Captured photo ${item.sequence}" src="${url}">
+        </div>
+
+        <div class="card-content">
+          <div>
+            <div class="filename">${escapeHtml(item.fileName)}</div>
+            <div class="meta-row">
+              <span>${escapeHtml(niceDateTime(item.capturedAt))}</span>
+              <span>${formatBytes(item.size || 0)}</span>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="note_${item.id}">Photo Notes</label>
+            <textarea class="note-box" id="note_${item.id}" placeholder="Enter a paragraph of notes for this photo...">${escapeHtml(item.note || "")}</textarea>
+          </div>
+
+          <div class="card-actions">
+            <button class="small-button ghost" type="button" data-action="download-photo">Download Photo</button>
+            <button class="small-button ghost" type="button" data-action="download-note">Download Note</button>
+            <button class="small-button danger" type="button" data-action="delete">Delete</button>
+          </div>
+        </div>
+      `;
+
+      const textarea = card.querySelector("textarea");
+      textarea.addEventListener("input", debounce(async () => {
+        item.note = textarea.value;
+        await idbPut(ITEM_STORE, item);
+        const match = currentItems.find(x => x.id === item.id);
+        if (match) match.note = item.note;
+        updateUiState();
+      }, 350));
+
+      card.querySelector("[data-action='delete']").addEventListener("click", async () => {
+        if (!confirm(`Delete ${item.fileName}?`)) return;
+        await idbDelete(ITEM_STORE, item.id);
+        currentItems = await idbGetItemsByProject(currentProject.id);
+        await renderProject();
+        toast("Photo deleted", "The photo was removed from this project.", "good");
+      });
+
+      card.querySelector("[data-action='download-photo']").addEventListener("click", () => {
+        downloadBlob(item.blob, item.fileName);
+      });
+
+      card.querySelector("[data-action='download-note']").addEventListener("click", () => {
+        const text = buildNoteText(item);
+        const name = item.fileName.replace(/\.[^.]+$/, ".txt");
+        downloadBlob(new Blob([text], { type: "text/plain;charset=utf-8" }), name);
+      });
+
+      return card;
+    }
+
+    function updateUiState() {
+      const hasProject = Boolean(currentProject);
+      const count = currentItems.length;
+      const noteCount = currentItems.filter(item => (item.note || "").trim().length > 0).length;
+
+      el.addPhotoLabel.style.opacity = hasProject ? "1" : "0.45";
+      el.addPhotoLabel.style.pointerEvents = hasProject ? "auto" : "none";
+      el.generatePdfBtn.disabled = !hasProject || count === 0;
+      el.completeBtn.disabled = !hasProject || count === 0;
+      el.downloadJsonBtn.disabled = !hasProject;
+      el.clearProjectBtn.disabled = !hasProject;
+
+      el.statPhotos.textContent = String(count);
+      el.statNotes.textContent = String(noteCount);
+      el.statStorage.textContent = storageHandle ? "Folder" : "Downloads";
+    }
+
+    function updateOnlineStatus() {
+      const online = navigator.onLine;
+      el.onlineDot.className = `dot ${online ? "good" : "bad"}`;
+      el.onlineText.textContent = online ? "Online" : "Offline";
+    }
+
+    async function updateStorageStatus() {
+      const supportsPicker = Boolean(window.showDirectoryPicker);
+
+      if (storageHandle) {
+        let granted = false;
+        try {
+          granted = await verifyPermission(storageHandle, false);
+        } catch (error) {
+          granted = false;
+        }
+        el.storageDot.className = `dot ${granted ? "good" : "warn"}`;
+        el.storageText.textContent = granted ? `Folder: ${storageHandle.name}` : `Folder permission needed`;
+        el.storageHint.textContent = granted
+          ? `Selected folder: ${storageHandle.name}. A project folder will be created inside it when you complete the report.`
+          : `Selected folder: ${storageHandle.name}, but the browser may ask for permission again before saving.`;
+      } else if (supportsPicker) {
+        el.storageDot.className = "dot warn";
+        el.storageText.textContent = "No folder selected";
+        el.storageHint.textContent = "No folder selected yet. Use Choose Save Folder to pick or create a destination folder.";
+      } else {
+        el.storageDot.className = "dot warn";
+        el.storageText.textContent = "Downloads fallback";
+        el.storageHint.textContent = "This browser does not support folder picking. Files will be downloaded individually instead.";
+      }
+
+      updateUiState();
+    }
+
+    async function verifyPermission(handle, requestWrite = true) {
+      if (!handle || !handle.queryPermission) return false;
+      const opts = { mode: requestWrite ? "readwrite" : "read" };
+      if ((await handle.queryPermission(opts)) === "granted") return true;
+      if (!requestWrite) return false;
+      return (await handle.requestPermission({ mode: "readwrite" })) === "granted";
+    }
+
+    async function getProjectDirectoryHandle() {
+      if (!storageHandle) return null;
+      const ok = await verifyPermission(storageHandle, true);
+      if (!ok) throw new Error("Permission to write to the selected folder was not granted.");
+
+      const parentName = safeFileStem(el.projectFolderName.value.trim() || currentProject.projectFolderName || "JScan Reports");
+      const parent = await storageHandle.getDirectoryHandle(parentName, { create: true });
+      const project = await parent.getDirectoryHandle(currentProject.id, { create: true });
+      return project;
+    }
+
+    async function writeBlobToDirectory(dirHandle, fileName, blob) {
+      const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+    }
+
+    async function writeTextToDirectory(dirHandle, fileName, text, mime = "text/plain;charset=utf-8") {
+      await writeBlobToDirectory(dirHandle, fileName, new Blob([text], { type: mime }));
+    }
+
+    function getProjectFolderPath() {
+      if (!currentProject) return "";
+      const root = currentProject.projectFolderName || el.projectFolderName.value.trim() || "JScan Reports";
+      const base = storageHandle ? storageHandle.name : "Downloads";
+      return `${base}/${root}/${currentProject.id}`;
+    }
+
+    async function completeProject() {
+      if (!currentProject || !currentItems.length) {
+        toast("Nothing to complete", "Add at least one photo first.", "warn");
+        return;
+      }
+
+      setBusy(true, "Generating report");
+
+      try {
+        currentProject.completedAt = new Date().toISOString();
+        currentProject.author = el.reportAuthor.value.trim();
+        currentProject.projectFolderName = el.projectFolderName.value.trim() || "JScan Reports";
+        await saveProject();
+
+        const pdfBlob = await generateReportPdf({ download: !storageHandle, returnBlob: true });
+        const pdfName = `${currentProject.basePhrase}_report_${formatDateTimeForFile(new Date())}.pdf`;
+
+        if (el.saveOnComplete.checked) {
+          if (storageHandle && window.showDirectoryPicker) {
+            await saveCompleteProjectToFolder(pdfBlob, pdfName);
+            toast("Project complete", `Saved photos, notes, manifest and PDF to ${getProjectFolderPath()}.`, "good");
+          } else {
+            downloadCompleteProjectFallback(pdfBlob, pdfName);
+            toast("Project complete", "Folder saving is unavailable, so the files were sent to your browser downloads.", "warn");
+          }
+        } else {
+          downloadBlob(pdfBlob, pdfName);
+          toast("Project complete", "PDF created. Project file saving was skipped.", "good");
+        } else {
+          toast("Project complete", "PDF created locally. selected folder upload was skipped.", "good");
+        }
+
+        await renderProject();
+      } catch (error) {
+        console.error(error);
+        toast("Complete failed", error.message || "Something went wrong while completing the project.", "bad");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function saveCompleteProjectToFolder(pdfBlob, pdfName) {
+      const dirHandle = await getProjectDirectoryHandle();
+      const totalSteps = currentItems.length * 2 + 2;
+      let step = 0;
+
+      for (const item of currentItems) {
+        await writeBlobToDirectory(dirHandle, item.fileName, item.blob);
+        updateProgress((++step / totalSteps) * 100);
+
+        const noteName = item.fileName.replace(/\.[^.]+$/, ".txt");
+        await writeTextToDirectory(dirHandle, noteName, buildNoteText(item));
+        updateProgress((++step / totalSteps) * 100);
+      }
+
+      const manifest = buildManifest();
+      await writeTextToDirectory(dirHandle, `${currentProject.basePhrase}_manifest.json`, JSON.stringify(manifest, null, 2), "application/json;charset=utf-8");
+      updateProgress((++step / totalSteps) * 100);
+
+      await writeBlobToDirectory(dirHandle, pdfName, pdfBlob);
+      updateProgress((++step / totalSteps) * 100);
+    }
+
+    function downloadCompleteProjectFallback(pdfBlob, pdfName) {
+      for (const item of currentItems) {
+        downloadBlob(item.blob, item.fileName);
+        const noteName = item.fileName.replace(/\.[^.]+$/, ".txt");
+        downloadBlob(new Blob([buildNoteText(item)], { type: "text/plain;charset=utf-8" }), noteName);
+      }
+      const manifest = buildManifest();
+      downloadBlob(new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json;charset=utf-8" }), `${currentProject.basePhrase}_manifest.json`);
+      downloadBlob(pdfBlob, pdfName);
+    }
+
+    function buildManifest() {
+      return {
+        project: {
+          id: currentProject.id,
+          title: currentProject.title,
+          createdAt: currentProject.createdAt,
+          completedAt: currentProject.completedAt,
+          author: currentProject.author || "",
+          storageFolder: getProjectFolderPath()
+        },
+        items: currentItems.map(item => ({
+          sequence: item.sequence,
+          fileName: item.fileName,
+          noteFileName: item.fileName.replace(/\.[^.]+$/, ".txt"),
+          capturedAt: item.capturedAt,
+          note: item.note || "",
+          size: item.size || 0,
+          mimeType: item.mimeType || "image/jpeg"
+        }))
+      };
+    }
+
+    function buildNoteText(item) {
+      return [
+        `File: ${item.fileName}`,
+        `Captured: ${niceDateTime(item.capturedAt)}`,
+        `Sequence: ${String(item.sequence).padStart(3, "0")}`,
+        "",
+        "Notes:",
+        (item.note || "").trim() || "(No notes entered)"
+      ].join("\n");
+    }
+
+    async function generateReportPdf(options = {}) {
+      if (!currentProject || !currentItems.length) {
+        toast("No photos", "Add at least one photo before generating a PDF.", "warn");
+        return null;
+      }
+
+      if (!window.jspdf || !window.jspdf.jsPDF) {
+        toast("PDF library not loaded", "Check your internet connection and try again.", "bad");
+        return null;
+      }
+
+      setBusy(true, "Building PDF");
+
+      try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4", compress: true });
+
+        const pageW = doc.internal.pageSize.getWidth();
+        const pageH = doc.internal.pageSize.getHeight();
+        const margin = 46;
+        const contentW = pageW - margin * 2;
+        const title = currentProject.title || "Photo Report";
+        const author = currentProject.author || el.reportAuthor.value.trim() || "";
+
+        // Cover
+        doc.setFillColor(15, 23, 42);
+        doc.rect(0, 0, pageW, pageH, "F");
+        doc.setTextColor(248, 250, 252);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(28);
+        doc.text(title, margin, 120, { maxWidth: contentW });
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(12);
+        doc.setTextColor(203, 213, 225);
+        doc.text(`Project ID: ${currentProject.id}`, margin, 170, { maxWidth: contentW });
+        doc.text(`Created: ${niceDateTime(currentProject.createdAt)}`, margin, 192);
+        if (currentProject.completedAt) doc.text(`Completed: ${niceDateTime(currentProject.completedAt)}`, margin, 214);
+        if (author) doc.text(`Prepared by: ${author}`, margin, 236);
+        doc.text(`Photos: ${currentItems.length}`, margin, author ? 258 : 236);
+
+        doc.setDrawColor(56, 189, 248);
+        doc.setLineWidth(3);
+        doc.line(margin, 292, pageW - margin, 292);
+
+        doc.setFontSize(10);
+        doc.setTextColor(148, 163, 184);
+        doc.text("Generated by JScan Photo Report", margin, pageH - 52);
+
+        // Items
+        for (let index = 0; index < currentItems.length; index++) {
+          const item = currentItems[index];
+          updateProgress((index / currentItems.length) * 90);
+
+          doc.addPage();
+          drawReportHeader(doc, pageW, margin, title);
+
+          let y = 86;
+
+          doc.setTextColor(15, 23, 42);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(15);
+          doc.text(`Photo ${String(item.sequence).padStart(3, "0")}`, margin, y);
+
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9.5);
+          doc.setTextColor(100, 116, 139);
+          doc.text(item.fileName, margin, y + 18, { maxWidth: contentW });
+
+          doc.text(`Captured: ${niceDateTime(item.capturedAt)}`, margin, y + 34);
+
+          y += 56;
+
+          const dataUrl = await blobToDataUrl(item.blob);
+          const img = await dataUrlToImage(dataUrl);
+
+          const maxImgW = contentW;
+          const maxImgH = 390;
+          const fit = fitInto(img.width, img.height, maxImgW, maxImgH);
+
+          doc.addImage(dataUrl, "JPEG", margin, y, fit.width, fit.height, undefined, "FAST");
+          y += fit.height + 24;
+
+          doc.setTextColor(15, 23, 42);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(12);
+          doc.text("Notes", margin, y);
+
+          y += 18;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(10.5);
+          doc.setTextColor(51, 65, 85);
+
+          const note = (item.note || "").trim() || "(No notes entered)";
+          const lines = doc.splitTextToSize(note, contentW);
+
+          for (const line of lines) {
+            if (y > pageH - 72) {
+              doc.addPage();
+              drawReportHeader(doc, pageW, margin, title);
+              y = 82;
+            }
+            doc.text(line, margin, y);
+            y += 15;
+          }
+        }
+
+        // Page numbers
+        const pages = doc.internal.getNumberOfPages();
+        for (let page = 1; page <= pages; page++) {
+          doc.setPage(page);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          if (page === 1) {
+            doc.setTextColor(148, 163, 184);
+          } else {
+            doc.setTextColor(100, 116, 139);
+          }
+          doc.text(`Page ${page} of ${pages}`, pageW - margin, pageH - 32, { align: "right" });
+        }
+
+        const pdfName = `${currentProject.basePhrase}_report_${formatDateTimeForFile(new Date())}.pdf`;
+        const pdfBlob = doc.output("blob");
+
+        if (options.download) {
+          doc.save(pdfName);
+        }
+
+        updateProgress(100);
+        if (!options.returnBlob) toast("PDF generated", "The report PDF has been created.", "good");
+        return pdfBlob;
+      } finally {
+        if (!options.returnBlob) setBusy(false);
+      }
+    }
+
+    function drawReportHeader(doc, pageW, margin, title) {
+      doc.setFillColor(248, 250, 252);
+      doc.rect(0, 0, pageW, 56, "F");
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(1);
+      doc.line(0, 56, pageW, 56);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text(title, margin, 34, { maxWidth: pageW - margin * 2 });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text("JScan Photo Report", pageW - margin, 34, { align: "right" });
+    }
+
+    function fitInto(width, height, maxWidth, maxHeight) {
+      const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+      return {
+        width: width * scale,
+        height: height * scale
+      };
+    }
+
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function dataUrlToImage(dataUrl) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = dataUrl;
+      });
+    }
+
+    async function downloadProjectJson() {
+      if (!currentProject) return;
+      const manifest = buildManifest();
+
+      const exportData = {
+        ...manifest,
+        note: "This JSON does not embed the image binary data. Photos are stored separately in IndexedDB and can be downloaded from their cards."
+      };
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json;charset=utf-8" });
+      downloadBlob(blob, `${currentProject.basePhrase}_project.json`);
+    }
+
+    async function clearCurrentProject() {
+      if (!currentProject) return;
+      if (!confirm("Clear this project and all photos stored locally on this device?")) return;
+
+      const id = currentProject.id;
+      for (const item of currentItems) {
+        await idbDelete(ITEM_STORE, item.id);
+      }
+      await idbDelete(PROJECT_STORE, id);
+
+      if (localStorage.getItem("jscan.lastProjectId") === id) {
+        localStorage.removeItem("jscan.lastProjectId");
+      }
+
+      currentProject = null;
+      currentItems = [];
+      await renderProject();
+      toast("Project cleared", "Local project data has been removed from this device.", "good");
+    }
+
+    function setBusy(isBusy, label = "") {
+      const disabled = Boolean(isBusy);
+      el.startProjectBtn.disabled = disabled;
+      el.loadLastProjectBtn.disabled = disabled;
+      el.photoInput.disabled = disabled;
+      el.generatePdfBtn.disabled = disabled || !currentProject || !currentItems.length;
+      el.completeBtn.disabled = disabled || !currentProject || !currentItems.length;
+
+      if (isBusy) {
+        el.progress.classList.add("is-visible");
+        updateProgress(5);
+        if (label) el.currentProjectMeta.textContent = label + "…";
+      } else {
+        setTimeout(() => {
+          el.progress.classList.remove("is-visible");
+          updateProgress(0);
+          renderProject();
+        }, 220);
+      }
+    }
+
+    function updateProgress(percent) {
+      el.progressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    }
+
+    function downloadBlob(blob, fileName) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 800);
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes) return "0 KB";
+      const units = ["B", "KB", "MB", "GB"];
+      let value = bytes;
+      let idx = 0;
+      while (value >= 1024 && idx < units.length - 1) {
+        value /= 1024;
+        idx++;
+      }
+      return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function debounce(fn, delay = 300) {
+      let timer = null;
+      return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), delay);
+      };
+    }
+
+    function releaseObjectUrls() {
+      for (const url of pendingObjectUrls) URL.revokeObjectURL(url);
+      pendingObjectUrls = [];
+    }
+
+    function toast(title, message, type = "info") {
+      const iconColor = type === "good" ? "var(--green)" : type === "bad" ? "var(--red)" : type === "warn" ? "var(--amber)" : "var(--blue)";
+      const node = document.createElement("div");
+      node.className = "toast";
+      node.innerHTML = `
+        <span class="dot" style="background:${iconColor}; margin-top:6px;"></span>
+        <div>
+          <strong>${escapeHtml(title)}</strong>
+          <p>${escapeHtml(message)}</p>
+        </div>
+      `;
+
+      el.toastWrap.appendChild(node);
+
+      setTimeout(() => {
+        node.style.opacity = "0";
+        node.style.transform = "translateY(8px)";
+        node.style.transition = "opacity 0.18s ease, transform 0.18s ease";
+        setTimeout(() => node.remove(), 220);
+      }, 4200);
+    }
+  </script>
+</body>
+</html>
