@@ -1360,9 +1360,19 @@
       await idbPut(PROJECT_STORE, { id: "__storage_handle__", handle: storageHandle, savedAt: new Date().toISOString() });
     }
 
+    function supportsFolderPicker() {
+      return Boolean(window.showDirectoryPicker && window.isSecureContext);
+    }
+
     async function chooseStorageFolder() {
       if (!window.showDirectoryPicker) {
         toast("Folder picker unavailable", "This browser does not support choosing a save folder. The app will use downloads instead.", "warn");
+        updateStorageStatus();
+        return;
+      }
+
+      if (!window.isSecureContext) {
+        toast("Secure page required", "The folder picker needs HTTPS or localhost. If you opened this as a file, run it from a local web server instead.", "warn");
         updateStorageStatus();
         return;
       }
@@ -1764,7 +1774,7 @@
     }
 
     async function updateStorageStatus() {
-      const supportsPicker = Boolean(window.showDirectoryPicker);
+      const supportsPicker = supportsFolderPicker();
 
       if (storageHandle) {
         let granted = false;
@@ -1842,22 +1852,21 @@
         currentProject.projectFolderName = el.projectFolderName.value.trim() || "JScan Reports";
         await saveProject();
 
+        const canUseFolderPicker = supportsFolderPicker();
         const pdfBlob = await generateReportPdf({ download: !storageHandle, returnBlob: true });
         const pdfName = `${currentProject.basePhrase}_report_${formatDateTimeForFile(new Date())}.pdf`;
 
         if (el.saveOnComplete.checked) {
-          if (storageHandle && window.showDirectoryPicker) {
+          if (storageHandle && canUseFolderPicker) {
             await saveCompleteProjectToFolder(pdfBlob, pdfName);
             toast("Project complete", `Saved photos, notes, manifest and PDF to ${getProjectFolderPath()}.`, "good");
           } else {
             downloadCompleteProjectFallback(pdfBlob, pdfName);
-            toast("Project complete", "Folder saving is unavailable, so the files were sent to your browser downloads.", "warn");
+            toast("Project complete", "Folder saving is unavailable here, so the files were sent to your browser downloads.", "warn");
           }
         } else {
           downloadBlob(pdfBlob, pdfName);
           toast("Project complete", "PDF created. Project file saving was skipped.", "good");
-        } else {
-          toast("Project complete", "PDF created locally. selected folder upload was skipped.", "good");
         }
 
         await renderProject();
