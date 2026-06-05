@@ -1109,6 +1109,8 @@
       frequency: 0,
       clarity: 0,
       strobeOffset: 0,
+      permissionPrimed: false,
+      permissionPriming: false,
       lastPitchTime: 0,
       lastFrameTime: performance.now()
     };
@@ -1209,6 +1211,100 @@
     function setStatus(text, active = false) {
       els.statusText.textContent = text;
       els.statusPill.classList.toggle("active", active);
+    }
+
+    function micConstraints() {
+      return {
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        }
+      };
+    }
+
+    function canUseMicrophone() {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      return Boolean(AudioContext && navigator.mediaDevices?.getUserMedia);
+    }
+
+    function requestMicStream() {
+      return navigator.mediaDevices.getUserMedia(micConstraints());
+    }
+
+    function stopStream(stream) {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    }
+
+    function handleMicUnavailable() {
+      const insecure = window.isSecureContext === false;
+      setStatus(insecure ? "HTTPS needed" : "Unsupported");
+      els.signalText.textContent = insecure ? "Blocked" : "No input";
+      els.lockText.textContent = insecure ? "Secure URL" : "Browser";
+      els.startButton.textContent = insecure ? "Needs HTTPS" : "Unavailable";
+    }
+
+    function handleMicError(error, autoRequest = false) {
+      const name = error?.name || "";
+      if (window.isSecureContext === false) {
+        handleMicUnavailable();
+        return;
+      }
+
+      if (autoRequest && (name === "NotAllowedError" || name === "SecurityError")) {
+        setStatus("Tap to allow");
+        els.signalText.textContent = "Permission";
+        els.lockText.textContent = "Tap Start";
+        els.startButton.textContent = "Start Microphone";
+        return;
+      }
+
+      if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        setStatus("No mic");
+        els.signalText.textContent = "No input";
+        els.lockText.textContent = "Device";
+        return;
+      }
+
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        setStatus("Mic denied");
+        els.signalText.textContent = "Blocked";
+        els.lockText.textContent = "Permission";
+        return;
+      }
+
+      setStatus("Mic blocked");
+      els.signalText.textContent = "No input";
+      els.lockText.textContent = "Permission";
+    }
+
+    async function primeMicrophonePermission() {
+      if (state.running || state.permissionPriming) return;
+      if (!canUseMicrophone()) {
+        handleMicUnavailable();
+        return;
+      }
+
+      state.permissionPriming = true;
+      setStatus("Allow mic");
+      els.signalText.textContent = "Permission";
+      els.lockText.textContent = "Prompt";
+
+      try {
+        const stream = await requestMicStream();
+        stopStream(stream);
+        state.permissionPrimed = true;
+        setStatus("Mic ready");
+        els.signalText.textContent = "Ready";
+        els.lockText.textContent = "Allowed";
+        els.startButton.textContent = "Start Tuner";
+      } catch (error) {
+        handleMicError(error, true);
+      } finally {
+        state.permissionPriming = false;
+      }
     }
 
     function renderInstrumentOptions() {
@@ -1367,6 +1463,7 @@
     }
 
     async function startAudio() {
+      if (state.permissionPriming) return;
       if (state.running) {
         stopAudio();
         return;
@@ -1374,19 +1471,13 @@
 
       try {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContext || !navigator.mediaDevices?.getUserMedia) {
-          setStatus("Unsupported");
+        if (!canUseMicrophone()) {
+          handleMicUnavailable();
           return;
         }
 
         state.audioContext = new AudioContext();
-        state.mediaStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false
-          }
-        });
+        state.mediaStream = await requestMicStream();
 
         const source = state.audioContext.createMediaStreamSource(state.mediaStream);
         await state.audioContext.resume();
@@ -1396,16 +1487,22 @@
         state.buffer = new Float32Array(state.analyser.fftSize);
         source.connect(state.analyser);
         state.running = true;
-        state.startButtonText = "Stop Microphone";
+        state.permissionPrimed = true;
         els.startButton.textContent = "Stop Microphone";
         setStatus("Listening", true);
         state.lastPitchTime = 0;
         state.lastFrameTime = performance.now();
         tick();
       } catch (error) {
-        setStatus("Mic blocked");
-        els.signalText.textContent = "No input";
-        els.lockText.textContent = "Permission";
+        stopStream(state.mediaStream);
+        if (state.audioContext) {
+          state.audioContext.close();
+        }
+        state.audioContext = null;
+        state.mediaStream = null;
+        state.analyser = null;
+        state.buffer = null;
+        handleMicError(error, false);
       }
     }
 
@@ -1572,6 +1669,7 @@
       updateTargetReadout();
       bindEvents();
       updateTunerDisplay(0, 0);
+      window.setTimeout(primeMicrophonePermission, 250);
     }
 
     init();
