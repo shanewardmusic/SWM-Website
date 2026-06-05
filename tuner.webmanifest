@@ -1,0 +1,16 @@
+{
+  "name": "SWM Tuner",
+  "short_name": "SWM Tuner",
+  "start_url": "tuner.html",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#101525",
+  "icons": [
+    {
+      "src": "swm-logo.jpeg",
+      "sizes": "1254x1254",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}
