@@ -155,7 +155,7 @@
       </section>
 
       <section class="editor-layout">
-        <aside class="panel timeline-panel">
+        <aside class="panel settings-panel">
           <section class="section title-tools">
             <div class="section-heading">
               <h2>Title</h2>
@@ -178,6 +178,50 @@
                 <input id="titleSize" type="number" value="96" min="12" step="1" />
               </label>
             </div>
+            <label>
+              <span>Font</span>
+              <select id="titleFont">
+                <option value="Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif">Impact</option>
+                <option value="Arial Black, Arial, sans-serif">Arial Black</option>
+                <option value="Helvetica Neue, Arial, sans-serif">Helvetica</option>
+                <option value="Georgia, serif">Georgia</option>
+                <option value="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">System</option>
+              </select>
+            </label>
+            <div class="timeline-grid color-grid">
+              <label>
+                <span>Fill</span>
+                <input id="titleColor" type="color" value="#ffffff" />
+              </label>
+              <label>
+                <span>Outline</span>
+                <input id="titleOutlineColor" type="color" value="#15110a" />
+              </label>
+              <label>
+                <span>Outline px</span>
+                <input id="titleOutlineWidth" type="number" value="7" min="0" step="0.5" />
+              </label>
+              <label>
+                <span>Shadow</span>
+                <input id="titleShadowColor" type="color" value="#00ff80" />
+              </label>
+              <label>
+                <span>Blur</span>
+                <input id="titleShadowBlur" type="number" value="18" min="0" step="1" />
+              </label>
+              <label>
+                <span>Shadow X</span>
+                <input id="titleShadowX" type="number" value="0" step="1" />
+              </label>
+              <label>
+                <span>Shadow Y</span>
+                <input id="titleShadowY" type="number" value="12" step="1" />
+              </label>
+              <label>
+                <span>Opacity</span>
+                <input id="titleShadowOpacity" type="number" value="0.42" min="0" max="1" step="0.05" />
+              </label>
+            </div>
           </section>
 
           <section class="section fade-tools">
@@ -194,12 +238,17 @@
             </label>
           </section>
 
-          <section class="section timeline-section">
+          <section class="section render-output">
             <div class="section-heading">
-              <h2>Timeline</h2>
-              <span id="timelineDuration" class="muted-pill">0:00</span>
+              <h2>Output</h2>
             </div>
-            <div id="editTimeline" class="edit-timeline"></div>
+            <div class="render-progress">
+              <div class="progress-track">
+                <div id="renderProgressBar" class="progress-bar"></div>
+              </div>
+              <span id="renderStatus">Ready</span>
+            </div>
+            <video id="outputPreview" class="output-preview" controls hidden></video>
           </section>
         </aside>
 
@@ -208,13 +257,36 @@
             <canvas id="renderCanvas" width="1080" height="1920"></canvas>
             <div id="titleOverlay" class="title-overlay"></div>
           </div>
-          <div class="render-progress">
-            <div class="progress-track">
-              <div id="renderProgressBar" class="progress-bar"></div>
-            </div>
-            <span id="renderStatus">Ready</span>
+
+          <div class="edit-transport">
+            <button id="editPlayPause" type="button">Play</button>
+            <span id="editTimeDisplay" class="time-display">0:00 / 0:00</span>
+            <input id="editSeekControl" type="range" min="0" max="1000" step="1" value="0" />
           </div>
-          <video id="outputPreview" class="output-preview" controls hidden></video>
+
+          <section class="timeline-preview">
+            <div class="section-heading">
+              <h2>Timeline</h2>
+              <div class="timeline-tools">
+                <span id="timelineDuration" class="muted-pill">0:00</span>
+                <label>
+                  <span>Zoom</span>
+                  <input id="timelineZoom" type="range" min="40" max="260" step="10" value="100" />
+                </label>
+              </div>
+            </div>
+            <div class="timeline-scroll">
+              <div id="editTimeline" class="edit-timeline"></div>
+            </div>
+          </section>
+
+          <section class="clip-inspector">
+            <div class="section-heading">
+              <h2>Clip</h2>
+              <span id="selectedClipMeta" class="muted-pill">None selected</span>
+            </div>
+            <div id="clipInspector" class="clip-inspector-body"></div>
+          </section>
         </section>
       </section>
     </main>

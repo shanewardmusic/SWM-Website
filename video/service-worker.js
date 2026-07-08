@@ -1,4 +1,4 @@
-const CACHE_NAME = "clip-shuffle-web-editor-v1";
+const CACHE_NAME = "clip-shuffle-web-editor-v2";
 const ASSETS = [
   "./",
   "./index.html",

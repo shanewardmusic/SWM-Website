@@ -51,6 +51,8 @@ const state = {
   activeFilter: { type: "all", categoryId: null },
   orders: {},
   editTimeline: [],
+  selectedTimelineItemId: null,
+  timelineZoom: 100,
   settings: {
     projectName: "Clip Shuffle Export",
     week: "",
@@ -68,6 +70,15 @@ const state = {
     text: "",
     duration: 5.67,
     size: 96,
+    font: "Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif",
+    color: "#ffffff",
+    outlineColor: "#15110a",
+    outlineWidth: 7,
+    shadowColor: "#00ff80",
+    shadowBlur: 18,
+    shadowX: 0,
+    shadowY: 12,
+    shadowOpacity: 0.42,
     x: 0.5,
     y: 0.14,
   },
@@ -80,6 +91,14 @@ const state = {
 
 const previewState = {
   token: 0,
+};
+
+const editPreviewState = {
+  playing: false,
+  rafId: null,
+  time: 0,
+  token: 0,
+  itemId: null,
 };
 
 const dragState = {
@@ -134,13 +153,29 @@ const els = {
   titleText: document.querySelector("#titleText"),
   titleDuration: document.querySelector("#titleDuration"),
   titleSize: document.querySelector("#titleSize"),
+  titleFont: document.querySelector("#titleFont"),
+  titleColor: document.querySelector("#titleColor"),
+  titleOutlineColor: document.querySelector("#titleOutlineColor"),
+  titleOutlineWidth: document.querySelector("#titleOutlineWidth"),
+  titleShadowColor: document.querySelector("#titleShadowColor"),
+  titleShadowBlur: document.querySelector("#titleShadowBlur"),
+  titleShadowX: document.querySelector("#titleShadowX"),
+  titleShadowY: document.querySelector("#titleShadowY"),
+  titleShadowOpacity: document.querySelector("#titleShadowOpacity"),
   fadeEnabled: document.querySelector("#fadeEnabled"),
   fadeDuration: document.querySelector("#fadeDuration"),
   editTimeline: document.querySelector("#editTimeline"),
   timelineDuration: document.querySelector("#timelineDuration"),
+  timelineZoom: document.querySelector("#timelineZoom"),
+  editPlayPause: document.querySelector("#editPlayPause"),
+  editTimeDisplay: document.querySelector("#editTimeDisplay"),
+  editSeekControl: document.querySelector("#editSeekControl"),
+  selectedClipMeta: document.querySelector("#selectedClipMeta"),
+  clipInspector: document.querySelector("#clipInspector"),
   stageWrap: document.querySelector("#stageWrap"),
   renderCanvas: document.querySelector("#renderCanvas"),
   titleOverlay: document.querySelector("#titleOverlay"),
+  renderVideo: document.querySelector("#renderVideo"),
   renderProgressBar: document.querySelector("#renderProgressBar"),
   renderStatus: document.querySelector("#renderStatus"),
   outputPreview: document.querySelector("#outputPreview"),
@@ -154,6 +189,7 @@ function init() {
   state.settings = { ...state.settings, ...(saved.settings || {}) };
   state.title = { ...state.title, ...(saved.title || {}) };
   state.fade = { ...state.fade, ...(saved.fade || {}) };
+  state.timelineZoom = numberValue(saved.timelineZoom, state.timelineZoom);
   normalizeCategories();
   bindEvents();
   syncInputsFromState();
@@ -200,6 +236,16 @@ function bindEvents() {
   els.generateButton.addEventListener("click", openEditor);
   els.backToReview.addEventListener("click", showReviewScreen);
   els.renderButton.addEventListener("click", renderComposition);
+  els.editPlayPause.addEventListener("click", toggleEditPreviewPlayback);
+  els.editSeekControl.addEventListener("input", () => {
+    const total = timelineDuration();
+    const time = total > 0 ? (Number(els.editSeekControl.value) / 1000) * total : 0;
+    seekEditPreview(time);
+  });
+  els.timelineZoom.addEventListener("input", () => {
+    state.timelineZoom = numberValue(els.timelineZoom.value, 100);
+    renderEditTimeline(state.selectedTimelineItemId);
+  });
 
   els.videoPlayer.addEventListener("loadedmetadata", onLoadedMetadata);
   els.videoPlayer.addEventListener("loadeddata", onPreviewReady);
@@ -250,7 +296,21 @@ function bindEvents() {
     saveSettings();
   });
 
-  [els.titleEnabled, els.titleText, els.titleDuration, els.titleSize].forEach((input) => {
+  [
+    els.titleEnabled,
+    els.titleText,
+    els.titleDuration,
+    els.titleSize,
+    els.titleFont,
+    els.titleColor,
+    els.titleOutlineColor,
+    els.titleOutlineWidth,
+    els.titleShadowColor,
+    els.titleShadowBlur,
+    els.titleShadowX,
+    els.titleShadowY,
+    els.titleShadowOpacity,
+  ].forEach((input) => {
     input.addEventListener("input", syncEditorControls);
     input.addEventListener("change", syncEditorControls);
   });
@@ -435,6 +495,8 @@ function createUndoSnapshot() {
       activeFilter: state.activeFilter,
       orders: state.orders,
       editTimeline: state.editTimeline,
+      selectedTimelineItemId: state.selectedTimelineItemId,
+      timelineZoom: state.timelineZoom,
       settings: state.settings,
       title: state.title,
       fade: state.fade,
@@ -459,6 +521,8 @@ function restoreUndoSnapshot(snapshot) {
   state.activeFilter = normalizeFilter(snapshot.activeFilter);
   state.orders = snapshot.orders || {};
   state.editTimeline = Array.isArray(snapshot.editTimeline) ? snapshot.editTimeline : [];
+  state.selectedTimelineItemId = snapshot.selectedTimelineItemId || state.editTimeline[0]?.id || null;
+  state.timelineZoom = numberValue(snapshot.timelineZoom, state.timelineZoom || 100);
   state.settings = { ...state.settings, ...(snapshot.settings || {}) };
   state.title = { ...state.title, ...(snapshot.title || {}) };
   state.fade = { ...state.fade, ...(snapshot.fade || {}) };
@@ -511,8 +575,18 @@ function syncInputsFromState() {
   els.titleText.value = state.title.text || defaultTitleText();
   els.titleDuration.value = state.title.duration;
   els.titleSize.value = state.title.size;
+  els.titleFont.value = state.title.font;
+  els.titleColor.value = state.title.color;
+  els.titleOutlineColor.value = state.title.outlineColor;
+  els.titleOutlineWidth.value = state.title.outlineWidth;
+  els.titleShadowColor.value = state.title.shadowColor;
+  els.titleShadowBlur.value = state.title.shadowBlur;
+  els.titleShadowX.value = state.title.shadowX;
+  els.titleShadowY.value = state.title.shadowY;
+  els.titleShadowOpacity.value = state.title.shadowOpacity;
   els.fadeEnabled.checked = state.fade.enabled;
   els.fadeDuration.value = state.fade.duration;
+  els.timelineZoom.value = state.timelineZoom;
 }
 
 function syncStateFromInputs() {
@@ -528,17 +602,27 @@ function syncStateFromInputs() {
   state.settings.previewVolume = numberValue(els.volumeControl.value, 0.85, true);
 }
 
-function syncEditorControls() {
+function syncEditorControls(eventOrOptions = {}) {
+  const redraw = eventOrOptions?.redraw !== false;
   state.title.enabled = els.titleEnabled.checked;
   state.title.text = els.titleText.value;
   state.title.duration = numberValue(els.titleDuration.value, 5.67);
   state.title.size = Math.round(numberValue(els.titleSize.value, 96));
+  state.title.font = els.titleFont.value;
+  state.title.color = els.titleColor.value || "#ffffff";
+  state.title.outlineColor = els.titleOutlineColor.value || "#15110a";
+  state.title.outlineWidth = numberValue(els.titleOutlineWidth.value, 7, true);
+  state.title.shadowColor = els.titleShadowColor.value || "#00ff80";
+  state.title.shadowBlur = numberValue(els.titleShadowBlur.value, 18, true);
+  state.title.shadowX = Number.isFinite(Number(els.titleShadowX.value)) ? Number(els.titleShadowX.value) : 0;
+  state.title.shadowY = Number.isFinite(Number(els.titleShadowY.value)) ? Number(els.titleShadowY.value) : 12;
+  state.title.shadowOpacity = clamp(numberValue(els.titleShadowOpacity.value, 0.42, true), 0, 1);
   state.fade.enabled = els.fadeEnabled.checked;
   state.fade.duration = numberValue(els.fadeDuration.value, 5, true);
   saveSettings();
   updateEditorSummary();
   updateTitleOverlay();
-  drawStagePreview();
+  if (redraw) drawEditPreviewAt(editPreviewState.time);
 }
 
 function saveSettings() {
@@ -550,6 +634,7 @@ function saveSettings() {
       settings: state.settings,
       title: state.title,
       fade: state.fade,
+      timelineZoom: state.timelineZoom,
     }),
   );
 }
@@ -1093,6 +1178,8 @@ function openEditor() {
     return;
   }
   buildEditTimeline();
+  state.selectedTimelineItemId = state.editTimeline[0]?.id || null;
+  editPreviewState.time = 0;
   state.title.text = state.title.text || defaultTitleText();
   syncInputsFromState();
   els.reviewScreen.hidden = true;
@@ -1100,10 +1187,11 @@ function openEditor() {
   renderEditTimeline();
   updateEditorSummary();
   updateTitleOverlay();
-  drawStagePreview();
+  drawEditPreviewAt(0);
 }
 
 function showReviewScreen() {
+  pauseEditPreview();
   els.editScreen.hidden = true;
   els.reviewScreen.hidden = false;
   renderReview();
@@ -1143,8 +1231,13 @@ function renderEditTimeline(activeId = null) {
     empty.className = "clip-empty";
     empty.textContent = "No clips in the generated timeline";
     els.editTimeline.append(empty);
+    renderClipInspector();
     return;
   }
+
+  const selectedId = activeId || state.selectedTimelineItemId || state.editTimeline[0]?.id;
+  state.selectedTimelineItemId = selectedId;
+  els.editTimeline.style.minWidth = `${Math.max(320, timelineDuration() * state.timelineZoom)}px`;
 
   state.editTimeline.forEach((item, index) => {
     const clip = getClip(item.clipId);
@@ -1152,17 +1245,21 @@ function renderEditTimeline(activeId = null) {
     const category = getCategory(item.categoryId);
     const node = document.createElement("article");
     node.className = "timeline-item";
+    if (item.id === selectedId) node.classList.add("selected");
     if (item.id === activeId) node.classList.add("dragging");
     node.dataset.itemId = item.id;
+    node.style.flexBasis = `${Math.max(76, itemDuration(item) * state.timelineZoom)}px`;
+    node.addEventListener("click", () => selectTimelineItem(item.id));
 
-    const header = document.createElement("div");
-    header.className = "timeline-item-header";
     const handle = document.createElement("button");
     handle.type = "button";
     handle.className = "drag-handle";
     handle.title = "Drag to reorder";
     handle.setAttribute("aria-label", "Drag to reorder");
-    handle.addEventListener("pointerdown", (event) => startTimelineReorder(event, item.id));
+    handle.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+      startTimelineReorder(event, item.id);
+    });
 
     const title = document.createElement("div");
     title.className = "timeline-item-title";
@@ -1172,44 +1269,33 @@ function renderEditTimeline(activeId = null) {
     sub.textContent = `${category?.name || "Clip"} | ${formatDuration(itemDuration(item))}`;
     title.append(strong, sub);
 
-    const actions = document.createElement("div");
-    actions.className = "timeline-item-actions";
-    const up = document.createElement("button");
-    up.type = "button";
-    up.textContent = "Up";
-    up.disabled = index === 0;
-    up.addEventListener("click", () => moveTimelineItem(index, index - 1));
-    const down = document.createElement("button");
-    down.type = "button";
-    down.textContent = "Down";
-    down.disabled = index === state.editTimeline.length - 1;
-    down.addEventListener("click", () => moveTimelineItem(index, index + 1));
-    actions.append(up, down);
-
-    header.append(handle, title, actions);
-    const trimArea = document.createElement("div");
-    trimArea.className = "trim-area";
-    const trimBar = document.createElement("div");
-    trimBar.className = "trim-bar";
-    trimBar.dataset.itemId = item.id;
-    const selected = document.createElement("div");
-    selected.className = "trim-selected";
     const startHandle = document.createElement("span");
     startHandle.className = "trim-handle start";
     const endHandle = document.createElement("span");
     endHandle.className = "trim-handle end";
-    startHandle.addEventListener("pointerdown", (event) => startTrimDrag(event, item.id, "start"));
-    endHandle.addEventListener("pointerdown", (event) => startTrimDrag(event, item.id, "end"));
-    trimBar.append(selected, startHandle, endHandle);
+    startHandle.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+      startTrimDrag(event, item.id, "start");
+    });
+    endHandle.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+      startTrimDrag(event, item.id, "end");
+    });
 
-    const times = document.createElement("div");
-    times.className = "trim-times";
-    times.append(document.createElement("span"), document.createElement("span"), document.createElement("span"));
-    trimArea.append(trimBar, times);
-    node.append(header, trimArea);
+    const indexBadge = document.createElement("span");
+    indexBadge.className = "timeline-index";
+    indexBadge.textContent = String(index + 1);
+
+    node.append(startHandle, handle, title, indexBadge, endHandle);
     els.editTimeline.append(node);
     updateTimelineItemDisplay(item.id);
   });
+
+  const playhead = document.createElement("div");
+  playhead.className = "timeline-playhead";
+  playhead.style.left = `${editPreviewState.time * state.timelineZoom}px`;
+  els.editTimeline.append(playhead);
+  renderClipInspector();
 }
 
 function moveTimelineItem(from, to) {
@@ -1217,13 +1303,15 @@ function moveTimelineItem(from, to) {
   pushUndoState("timeline order");
   const [item] = state.editTimeline.splice(from, 1);
   state.editTimeline.splice(to, 0, item);
+  state.selectedTimelineItemId = item.id;
   renderEditTimeline(item.id);
   updateEditorSummary();
-  drawStagePreview();
+  drawEditPreviewAt(editPreviewState.time);
 }
 
 function startTimelineReorder(event, itemId) {
   event.preventDefault();
+  selectTimelineItem(itemId);
   dragState.reorderId = itemId;
   event.currentTarget.setPointerCapture?.(event.pointerId);
   const row = event.currentTarget.closest(".timeline-item");
@@ -1244,21 +1332,24 @@ function onTimelineReorderMove(event) {
   if (from < 0 || to < 0 || from === to) return;
   const [item] = state.editTimeline.splice(from, 1);
   state.editTimeline.splice(to, 0, item);
+  state.selectedTimelineItemId = itemId;
   renderEditTimeline(itemId);
   updateEditorSummary();
 }
 
 function startTrimDrag(event, itemId, edge) {
   event.preventDefault();
-  const bar = event.currentTarget.closest(".trim-bar");
-  if (!bar) return;
   const item = getTimelineItem(itemId);
   if (!item) return;
+  selectTimelineItem(itemId);
   dragState.trim = {
     itemId,
     edge,
-    rect: bar.getBoundingClientRect(),
+    startX: event.clientX,
+    originalStart: item.start,
+    originalEnd: item.end,
     sourceDuration: itemSourceDuration(item),
+    zoom: state.timelineZoom,
   };
   event.currentTarget.setPointerCapture?.(event.pointerId);
 }
@@ -1268,41 +1359,122 @@ function onTrimMove(event) {
   if (!trim) return;
   const item = getTimelineItem(trim.itemId);
   if (!item) return;
-  const ratio = clamp((event.clientX - trim.rect.left) / trim.rect.width, 0, 1);
-  const value = ratio * trim.sourceDuration;
+  const deltaSeconds = (event.clientX - trim.startX) / Math.max(1, trim.zoom);
   if (trim.edge === "start") {
-    item.start = clamp(value, 0, item.end - 0.1);
+    item.start = clamp(trim.originalStart + deltaSeconds, 0, item.end - 0.1);
   } else {
-    item.end = clamp(value, item.start + 0.1, trim.sourceDuration);
+    item.end = clamp(trim.originalEnd + deltaSeconds, item.start + 0.1, trim.sourceDuration);
   }
   updateTimelineItemDisplay(item.id);
   updateEditorSummary();
-  drawStagePreview();
+  renderClipInspector();
+  drawEditPreviewAt(editPreviewState.time);
 }
 
 function updateTimelineItemDisplay(itemId) {
   const item = getTimelineItem(itemId);
   const row = item ? els.editTimeline.querySelector(`[data-item-id="${cssEscape(itemId)}"]`) : null;
   if (!item || !row) return;
-  const duration = itemSourceDuration(item);
-  const startPct = duration > 0 ? (item.start / duration) * 100 : 0;
-  const endPct = duration > 0 ? (item.end / duration) * 100 : 100;
-  const selected = row.querySelector(".trim-selected");
-  const startHandle = row.querySelector(".trim-handle.start");
-  const endHandle = row.querySelector(".trim-handle.end");
-  const times = row.querySelectorAll(".trim-times span");
   const sub = row.querySelector(".timeline-item-title span");
-  selected.style.left = `${startPct}%`;
-  selected.style.width = `${Math.max(0, endPct - startPct)}%`;
-  startHandle.style.left = `${startPct}%`;
-  endHandle.style.right = `${100 - endPct}%`;
-  times[0].textContent = formatPreciseTime(item.start);
-  times[1].textContent = formatDuration(itemDuration(item));
-  times[2].textContent = formatPreciseTime(item.end);
+  row.style.flexBasis = `${Math.max(76, itemDuration(item) * state.timelineZoom)}px`;
   if (sub) {
     const category = getCategory(item.categoryId);
-    sub.textContent = `${category?.name || "Clip"} | ${formatDuration(itemDuration(item))}`;
+    sub.textContent = `${category?.name || "Clip"} | ${formatPreciseTime(item.start)}-${formatPreciseTime(item.end)}`;
   }
+}
+
+function selectTimelineItem(itemId, seekToItem = false) {
+  const item = getTimelineItem(itemId);
+  if (!item) return;
+  state.selectedTimelineItemId = itemId;
+  els.editTimeline.querySelectorAll(".timeline-item").forEach((row) => {
+    row.classList.toggle("selected", row.dataset.itemId === itemId);
+  });
+  renderClipInspector();
+  if (seekToItem) {
+    seekEditPreview(timelineItemStartTime(itemId));
+  }
+}
+
+function renderClipInspector() {
+  const item = getTimelineItem(state.selectedTimelineItemId);
+  const clip = item ? getClip(item.clipId) : null;
+  els.clipInspector.replaceChildren();
+  if (!item || !clip) {
+    els.selectedClipMeta.textContent = "None selected";
+    const empty = document.createElement("div");
+    empty.className = "clip-empty";
+    empty.textContent = "Select a clip in the timeline";
+    els.clipInspector.append(empty);
+    return;
+  }
+
+  const category = getCategory(item.categoryId);
+  els.selectedClipMeta.textContent = `${formatDuration(itemDuration(item))} selected`;
+
+  const meta = document.createElement("div");
+  meta.className = "inspector-meta";
+  meta.innerHTML = `
+    <strong></strong>
+    <span></span>
+  `;
+  meta.querySelector("strong").textContent = clip.name;
+  meta.querySelector("span").textContent = `${category?.name || "Clip"} | Source ${formatDuration(itemSourceDuration(item))}`;
+
+  const grid = document.createElement("div");
+  grid.className = "timeline-grid inspector-grid";
+  const startLabel = makeInspectorNumber("Start", item.start, 0, item.end - 0.1, (value) => {
+    item.start = clamp(value, 0, item.end - 0.1);
+    renderEditTimeline(item.id);
+    updateEditorSummary();
+    drawEditPreviewAt(editPreviewState.time);
+  });
+  const endLabel = makeInspectorNumber("End", item.end, item.start + 0.1, itemSourceDuration(item), (value) => {
+    item.end = clamp(value, item.start + 0.1, itemSourceDuration(item));
+    renderEditTimeline(item.id);
+    updateEditorSummary();
+    drawEditPreviewAt(editPreviewState.time);
+  });
+  const durationLabel = document.createElement("label");
+  durationLabel.innerHTML = `<span>Duration</span><input readonly />`;
+  durationLabel.querySelector("input").value = formatPreciseTime(itemDuration(item));
+  grid.append(startLabel, endLabel, durationLabel);
+
+  const actions = document.createElement("div");
+  actions.className = "inspector-actions";
+  const index = state.editTimeline.findIndex((entry) => entry.id === item.id);
+  const prev = document.createElement("button");
+  prev.type = "button";
+  prev.textContent = "Prev";
+  prev.disabled = index <= 0;
+  prev.addEventListener("click", () => selectTimelineItem(state.editTimeline[index - 1].id, true));
+  const next = document.createElement("button");
+  next.type = "button";
+  next.textContent = "Next";
+  next.disabled = index >= state.editTimeline.length - 1;
+  next.addEventListener("click", () => selectTimelineItem(state.editTimeline[index + 1].id, true));
+  const jump = document.createElement("button");
+  jump.type = "button";
+  jump.textContent = "Jump to Clip";
+  jump.addEventListener("click", () => selectTimelineItem(item.id, true));
+  actions.append(prev, next, jump);
+
+  els.clipInspector.append(meta, grid, actions);
+}
+
+function makeInspectorNumber(label, value, min, max, onChange) {
+  const wrapper = document.createElement("label");
+  const span = document.createElement("span");
+  span.textContent = label;
+  const input = document.createElement("input");
+  input.type = "number";
+  input.step = "0.1";
+  input.min = String(Math.max(0, min));
+  input.max = String(Math.max(min, max));
+  input.value = value.toFixed(1);
+  input.addEventListener("change", () => onChange(Number(input.value)));
+  wrapper.append(span, input);
+  return wrapper;
 }
 
 function updateEditorSummary() {
@@ -1311,6 +1483,7 @@ function updateEditorSummary() {
   els.timelineSummary.textContent = `${clipCount} clips | ${formatDuration(duration)}`;
   els.timelineDuration.textContent = formatDuration(duration);
   els.renderButton.disabled = state.isRendering || !clipCount;
+  updateEditTransport();
 }
 
 function startTitleDrag(event) {
@@ -1354,6 +1527,14 @@ function updateTitleOverlay() {
   els.titleOverlay.textContent = text;
   els.titleOverlay.style.left = `${state.title.x * 100}%`;
   els.titleOverlay.style.top = `${state.title.y * 100}%`;
+  els.titleOverlay.style.fontFamily = state.title.font;
+  els.titleOverlay.style.color = state.title.color;
+  els.titleOverlay.style.webkitTextStroke = `${Math.max(0, state.title.outlineWidth / 18)}px ${state.title.outlineColor}`;
+  els.titleOverlay.style.textShadow = `${state.title.shadowX}px ${state.title.shadowY}px ${state.title.shadowBlur}px ${hexToRgba(
+    state.title.shadowColor,
+    state.title.shadowOpacity,
+  )}`;
+  els.titleOverlay.style.setProperty("--title-size", `${state.title.size}px`);
 }
 
 function drawStagePreview() {
@@ -1369,10 +1550,150 @@ function drawStagePreview() {
   drawTitle(ctx, 0, Math.max(timelineDuration(), state.title.duration || 0));
 }
 
+async function drawEditPreviewAt(time) {
+  const total = timelineDuration();
+  editPreviewState.time = clamp(time, 0, Math.max(0, total));
+  updateEditTransport();
+  const located = timelineItemAtTime(editPreviewState.time);
+  if (!located) {
+    drawStagePreview();
+    return;
+  }
+
+  const token = ++editPreviewState.token;
+  const clip = getClip(located.item.clipId);
+  if (!clip) return;
+  selectTimelineItem(located.item.id, false);
+  const video = els.renderVideo;
+  if (video.dataset.itemId !== located.item.id) {
+    video.pause();
+    video.src = objectUrlForClip(clip);
+    video.dataset.itemId = located.item.id;
+    video.load();
+  }
+  await waitForVideoMetadata(video);
+  if (token !== editPreviewState.token) return;
+  await seekVideo(video, located.item.start + located.localTime);
+  if (token !== editPreviewState.token) return;
+  drawVideoFrame(els.renderCanvas.getContext("2d"), video, editPreviewState.time, total);
+}
+
+function seekEditPreview(time) {
+  pauseEditPreview();
+  drawEditPreviewAt(time);
+}
+
+function toggleEditPreviewPlayback() {
+  if (editPreviewState.playing) {
+    pauseEditPreview();
+    return;
+  }
+  playEditPreview();
+}
+
+async function playEditPreview() {
+  const total = timelineDuration();
+  if (!state.editTimeline.length || total <= 0) return;
+  editPreviewState.playing = true;
+  els.editPlayPause.textContent = "Pause";
+  if (editPreviewState.time >= total) editPreviewState.time = 0;
+
+  try {
+    while (editPreviewState.playing && editPreviewState.time < total) {
+      const located = timelineItemAtTime(editPreviewState.time);
+      if (!located) break;
+      const clip = getClip(located.item.clipId);
+      if (!clip) break;
+      selectTimelineItem(located.item.id, false);
+
+      const video = els.renderVideo;
+      if (video.dataset.itemId !== located.item.id) {
+        video.pause();
+        video.src = objectUrlForClip(clip);
+        video.dataset.itemId = located.item.id;
+        video.load();
+      }
+      await waitForVideoMetadata(video);
+      await seekVideo(video, located.item.start + located.localTime);
+      video.volume = state.settings.previewVolume;
+      await video.play();
+
+      const itemGlobalStart = located.globalStart;
+      const startedAt = performance.now();
+      const startedLocal = located.localTime;
+      while (editPreviewState.playing) {
+        const elapsed = (performance.now() - startedAt) / 1000;
+        const localTime = startedLocal + elapsed;
+        const globalTime = itemGlobalStart + localTime;
+        if (localTime >= itemDuration(located.item) || globalTime >= total) break;
+        editPreviewState.time = globalTime;
+        video.volume = state.settings.previewVolume * fadeGain(globalTime, total);
+        drawVideoFrame(els.renderCanvas.getContext("2d"), video, globalTime, total);
+        updateEditTransport();
+        editPreviewState.rafId = requestAnimationFrame(() => {});
+        await nextAnimationFrame();
+      }
+      video.pause();
+      editPreviewState.time = Math.min(total, itemGlobalStart + itemDuration(located.item));
+    }
+  } catch (error) {
+    toast(error.message || "Preview playback failed");
+  } finally {
+    if (editPreviewState.time >= total) editPreviewState.time = total;
+    pauseEditPreview(false);
+    updateEditTransport();
+  }
+}
+
+function pauseEditPreview(redraw = false) {
+  editPreviewState.playing = false;
+  els.editPlayPause.textContent = "Play";
+  if (editPreviewState.rafId) cancelAnimationFrame(editPreviewState.rafId);
+  editPreviewState.rafId = null;
+  els.renderVideo.pause();
+  if (redraw) drawEditPreviewAt(editPreviewState.time);
+}
+
+function updateEditTransport() {
+  const total = timelineDuration();
+  editPreviewState.time = clamp(editPreviewState.time, 0, Math.max(0, total));
+  els.editSeekControl.disabled = total <= 0;
+  els.editSeekControl.value = total > 0 ? String(Math.round((editPreviewState.time / total) * 1000)) : "0";
+  els.editTimeDisplay.textContent = `${formatDuration(editPreviewState.time)} / ${formatDuration(total)}`;
+  const playhead = els.editTimeline.querySelector(".timeline-playhead");
+  if (playhead) playhead.style.left = `${editPreviewState.time * state.timelineZoom}px`;
+}
+
+function timelineItemAtTime(time) {
+  let cursor = 0;
+  for (const item of state.editTimeline) {
+    const duration = itemDuration(item);
+    if (time <= cursor + duration || item === state.editTimeline[state.editTimeline.length - 1]) {
+      return {
+        item,
+        localTime: clamp(time - cursor, 0, duration),
+        globalStart: cursor,
+      };
+    }
+    cursor += duration;
+  }
+  return null;
+}
+
+function timelineItemStartTime(itemId) {
+  let cursor = 0;
+  for (const item of state.editTimeline) {
+    if (item.id === itemId) return cursor;
+    cursor += itemDuration(item);
+  }
+  return 0;
+}
+
 async function renderComposition() {
   if (state.isRendering) return;
+  pauseEditPreview();
   syncStateFromInputs();
-  syncEditorControls();
+  syncEditorControls({ redraw: false });
   resizeCanvasToSettings();
 
   if (!state.editTimeline.length) {
@@ -1534,17 +1855,20 @@ function drawTitle(ctx, globalTime, totalDuration) {
   ctx.save();
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = `900 ${fontSize}px Impact, Haettenschweiler, Arial Narrow, sans-serif`;
+  ctx.font = `900 ${fontSize}px ${state.title.font}`;
   ctx.lineJoin = "round";
-  ctx.shadowColor = "rgba(0, 255, 128, 0.42)";
-  ctx.shadowBlur = 18 * scale;
-  ctx.shadowOffsetY = 12 * scale;
+  ctx.shadowColor = hexToRgba(state.title.shadowColor, state.title.shadowOpacity);
+  ctx.shadowBlur = state.title.shadowBlur * scale;
+  ctx.shadowOffsetX = state.title.shadowX * scale;
+  ctx.shadowOffsetY = state.title.shadowY * scale;
   lines.forEach((line, index) => {
     const lineY = y + (index - (lines.length - 1) / 2) * lineHeight;
-    ctx.strokeStyle = "#15110a";
-    ctx.lineWidth = Math.max(4, 7 * scale);
-    ctx.strokeText(line, x, lineY);
-    ctx.fillStyle = "#ffffff";
+    if (state.title.outlineWidth > 0) {
+      ctx.strokeStyle = state.title.outlineColor;
+      ctx.lineWidth = Math.max(0, state.title.outlineWidth * scale);
+      ctx.strokeText(line, x, lineY);
+    }
+    ctx.fillStyle = state.title.color;
     ctx.fillText(line, x, lineY);
   });
   ctx.restore();
@@ -1895,6 +2219,18 @@ function numberValue(value, fallback, allowZero = false) {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function hexToRgba(hex, alpha = 1) {
+  const normalized = String(hex || "#000000").replace("#", "");
+  const full = normalized.length === 3
+    ? normalized.split("").map((char) => char + char).join("")
+    : normalized.padEnd(6, "0").slice(0, 6);
+  const value = Number.parseInt(full, 16);
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  return `rgba(${red}, ${green}, ${blue}, ${clamp(Number(alpha) || 0, 0, 1)})`;
 }
 
 function slug(value) {

@@ -2,7 +2,7 @@
 
 Standalone browser/PWA version of Clip Shuffle.
 
-This version lets you select local clips, review and tag them, build an editable timeline, drag clips to reorder, drag trim handles, position a title on screen, add a default fade to black, and render a downloadable video in the browser.
+This version lets you select local clips, review and tag them, build an editable timeline, preview the edited video, drag clips to reorder, drag trim handles, position/style a title on screen, add a default fade to black, and render a downloadable video in the browser.
 
 ## Upload
 
@@ -22,7 +22,7 @@ For installable PWA behavior, serve it over HTTPS. GitHub Pages is fine.
    - `O` Other
    - `S` Skipped
 4. Click `Generate Video`.
-5. Reorder clips, drag trim handles, move the title, and set fade options.
+5. Reorder clips on the zoomable preview timeline, drag trim handles, move/style the title, preview playback, and set fade options.
 6. Click `Render Video`.
 
 ## Notes
