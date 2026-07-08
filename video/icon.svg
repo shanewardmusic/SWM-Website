@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0f766e"/>
+  <path d="M116 150h280v212H116z" fill="#f8fafc"/>
+  <path d="M159 196h94v120h-94zM279 196h74v33h-74zM279 242h74v33h-74zM279 288h74v28h-74z" fill="#0f766e"/>
+  <path d="M98 134h316v34H98zM98 344h316v34H98z" fill="#111827" opacity=".18"/>
+  <text x="256" y="438" text-anchor="middle" font-family="Arial, sans-serif" font-size="72" font-weight="800" fill="#ffffff">CS</text>
+</svg>

@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f6f7f9" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Clip Shuffle" />
+    <title>Clip Shuffle Web Editor</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icon.svg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">CS</span>
+        <div>
+          <h1>Clip Shuffle</h1>
+          <span>Web Editor</span>
+        </div>
+      </div>
+      <div class="project-fields">
+        <label>
+          <span>Week</span>
+          <input id="weekInput" placeholder="4" autocomplete="off" />
+        </label>
+        <label>
+          <span>Season</span>
+          <input id="seasonInput" placeholder="Winter 2026" autocomplete="off" />
+        </label>
+        <label>
+          <span>Project</span>
+          <input id="projectName" value="Clip Shuffle Export" autocomplete="off" />
+        </label>
+      </div>
+    </header>
+
+    <main id="reviewScreen" class="screen layout">
+      <aside class="panel sidebar">
+        <section class="section">
+          <div class="section-heading">
+            <h2>Media</h2>
+          </div>
+          <div class="file-actions">
+            <input id="folderPicker" type="file" webkitdirectory multiple hidden />
+            <input id="filePicker" type="file" accept="video/*,.mov,.mp4,.m4v,.webm,.mxf,.mts,.m2ts,.mkv" multiple hidden />
+            <button id="selectFolder" type="button">Folder</button>
+            <button id="selectFiles" type="button">Files</button>
+            <button id="clearFiles" type="button">Clear</button>
+          </div>
+          <label class="check-row">
+            <input id="recursiveInput" type="checkbox" checked disabled />
+            <span>Recursive folders</span>
+          </label>
+          <div id="scanSummary" class="summary">No clips loaded</div>
+        </section>
+
+        <section class="section">
+          <div class="section-heading">
+            <h2>Categories</h2>
+            <button id="addCategory" type="button">Add</button>
+          </div>
+          <div id="categoryList" class="category-list"></div>
+        </section>
+      </aside>
+
+      <section class="review">
+        <div class="viewer-wrap">
+          <video id="videoPlayer" playsinline preload="metadata"></video>
+          <div id="previewMessage" class="preview-message" hidden></div>
+        </div>
+        <div class="transport-bar">
+          <button id="playPause" type="button">Play</button>
+          <span id="timeDisplay" class="time-display">0:00 / 0:00</span>
+          <input id="seekControl" type="range" min="0" max="1000" step="1" value="0" />
+        </div>
+        <div class="clip-strip">
+          <div class="clip-title">
+            <strong id="currentName">No clip selected</strong>
+            <span id="currentMeta"></span>
+          </div>
+          <div class="clip-actions">
+            <span id="clipViewCount" class="clip-view-count">0 / 0 clips</span>
+            <button id="undoButton" type="button" disabled>Undo</button>
+            <label class="scrub-control">
+              <span>Scrub</span>
+              <input id="scrubStep" type="number" value="3" min="0.25" step="0.25" />
+            </label>
+            <label class="volume-control">
+              <span>Volume</span>
+              <input id="volumeControl" type="range" min="0" max="1" step="0.01" value="0.85" />
+            </label>
+            <button id="prevClip" type="button">Prev</button>
+            <button id="toggleInclude" type="button">Exclude</button>
+            <button id="nextClip" type="button">Next</button>
+          </div>
+        </div>
+        <div id="assignButtons" class="assign-buttons"></div>
+        <div id="clipList" class="clip-list"></div>
+      </section>
+
+      <aside class="panel export-panel">
+        <section class="section">
+          <div class="section-heading">
+            <h2>Order</h2>
+            <button id="shuffleButton" type="button">Shuffle</button>
+          </div>
+          <label>
+            <span>Seed</span>
+            <input id="seedInput" placeholder="optional" autocomplete="off" />
+          </label>
+          <div id="orderStats" class="order-stats" aria-live="polite">
+            <div id="orderTotals" class="order-totals"></div>
+            <div id="gameplayRequired" class="gameplay-required"></div>
+          </div>
+          <button id="generateButton" class="primary-button" type="button">Generate Video</button>
+        </section>
+
+        <section class="section">
+          <div class="section-heading">
+            <h2>Render</h2>
+          </div>
+          <div class="timeline-grid">
+            <label>
+              <span>FPS</span>
+              <input id="frameRate" type="number" value="30" min="1" step="1" />
+            </label>
+            <label>
+              <span>Width</span>
+              <input id="frameWidth" type="number" value="1080" min="1" step="1" />
+            </label>
+            <label>
+              <span>Height</span>
+              <input id="frameHeight" type="number" value="1920" min="1" step="1" />
+            </label>
+            <label>
+              <span>Fallback</span>
+              <input id="defaultDuration" type="number" value="5" min="1" step="0.1" />
+            </label>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <main id="editScreen" class="screen editor-screen" hidden>
+      <section class="editor-top">
+        <button id="backToReview" type="button">Back</button>
+        <div class="editor-heading">
+          <h2>Generate Video</h2>
+          <span id="timelineSummary">No clips ready</span>
+        </div>
+        <button id="renderButton" class="primary-button" type="button">Render Video</button>
+      </section>
+
+      <section class="editor-layout">
+        <aside class="panel timeline-panel">
+          <section class="section title-tools">
+            <div class="section-heading">
+              <h2>Title</h2>
+              <label class="switch-row">
+                <input id="titleEnabled" type="checkbox" checked />
+                <span>Show</span>
+              </label>
+            </div>
+            <label>
+              <span>Text</span>
+              <textarea id="titleText" rows="3"></textarea>
+            </label>
+            <div class="timeline-grid">
+              <label>
+                <span>Seconds</span>
+                <input id="titleDuration" type="number" value="5.67" min="0.5" step="0.1" />
+              </label>
+              <label>
+                <span>Size</span>
+                <input id="titleSize" type="number" value="96" min="12" step="1" />
+              </label>
+            </div>
+          </section>
+
+          <section class="section fade-tools">
+            <div class="section-heading">
+              <h2>Fade</h2>
+              <label class="switch-row">
+                <input id="fadeEnabled" type="checkbox" checked />
+                <span>On</span>
+              </label>
+            </div>
+            <label>
+              <span>Fade to black</span>
+              <input id="fadeDuration" type="number" value="5" min="0" step="0.25" />
+            </label>
+          </section>
+
+          <section class="section timeline-section">
+            <div class="section-heading">
+              <h2>Timeline</h2>
+              <span id="timelineDuration" class="muted-pill">0:00</span>
+            </div>
+            <div id="editTimeline" class="edit-timeline"></div>
+          </section>
+        </aside>
+
+        <section class="panel preview-panel">
+          <div id="stageWrap" class="stage-wrap">
+            <canvas id="renderCanvas" width="1080" height="1920"></canvas>
+            <div id="titleOverlay" class="title-overlay"></div>
+          </div>
+          <div class="render-progress">
+            <div class="progress-track">
+              <div id="renderProgressBar" class="progress-bar"></div>
+            </div>
+            <span id="renderStatus">Ready</span>
+          </div>
+          <video id="outputPreview" class="output-preview" controls hidden></video>
+        </section>
+      </section>
+    </main>
+
+    <video id="renderVideo" playsinline preload="auto" hidden></video>
+    <div id="toast" class="toast" hidden></div>
+    <script src="app.js"></script>
+  </body>
+</html>

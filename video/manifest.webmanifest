@@ -1,0 +1,19 @@
+{
+  "name": "Clip Shuffle Web Editor",
+  "short_name": "Clip Shuffle",
+  "description": "Review, trim, arrange, title, and render local clips in the browser.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f7f9",
+  "theme_color": "#0f766e",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ]
+}
