@@ -552,12 +552,20 @@
       vignette: 0
     };
 
+    const PREVIEW_MAX_EDGE = 2200;
+    const PREVIEW_MAX_PIXELS = 2400000;
+
     const state = {
       width: 1200,
       height: 800,
       bgColor: '#ffffff',
       fitMode: 'cover',
       zoom: 0.7,
+      preview: {
+        width: 1200,
+        height: 800,
+        scale: 1
+      },
       source: null,
       rotation: 0,
       flipX: false,
@@ -574,7 +582,8 @@
         custom: false
       },
       drag: null,
-      renderQueued: false
+      renderQueued: false,
+      exporting: false
     };
 
     const els = {
@@ -657,15 +666,6 @@
       return Math.max(min, Math.min(max, value));
     }
 
-    function readFileAsDataUrl(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
-
     function loadImage(src) {
       return new Promise((resolve, reject) => {
         const img = new Image();
@@ -675,22 +675,51 @@
       });
     }
 
+    function releaseCurrentSource() {
+      if (state.source?.objectUrl) URL.revokeObjectURL(state.source.src);
+    }
+
+    function updatePreviewResolution() {
+      const pixels = state.width * state.height;
+      const scale = Math.min(
+        1,
+        PREVIEW_MAX_EDGE / state.width,
+        PREVIEW_MAX_EDGE / state.height,
+        Math.sqrt(PREVIEW_MAX_PIXELS / pixels)
+      );
+      const width = Math.max(1, Math.round(state.width * scale));
+      const height = Math.max(1, Math.round(state.height * scale));
+      state.preview = { width, height, scale };
+      if (previewCanvas.width !== width) previewCanvas.width = width;
+      if (previewCanvas.height !== height) previewCanvas.height = height;
+      previewCtx.imageSmoothingEnabled = true;
+      previewCtx.imageSmoothingQuality = 'high';
+    }
+
     async function loadPhoto(file) {
       if (!file || !file.type.startsWith('image/')) return;
-      const src = await readFileAsDataUrl(file);
-      const img = await loadImage(src);
+      const src = URL.createObjectURL(file);
+      let img;
+      try {
+        img = await loadImage(src);
+      } catch (error) {
+        URL.revokeObjectURL(src);
+        alert('That image could not be loaded.');
+        return;
+      }
+      releaseCurrentSource();
       state.source = {
         name: file.name || 'photo',
         src,
         img,
         naturalWidth: img.naturalWidth,
-        naturalHeight: img.naturalHeight
+        naturalHeight: img.naturalHeight,
+        objectUrl: true
       };
       setCanvasSize(img.naturalWidth, img.naturalHeight, { resetWatermark: true });
       els.filePill.textContent = `${state.source.name}`;
       emptyStage.classList.add('hidden');
-      els.exportPng.disabled = false;
-      els.exportJpg.disabled = false;
+      setExporting(false);
       fitZoom();
       queueRender();
     }
@@ -700,8 +729,7 @@
       state.height = clamp(Math.round(height) || 800, 50, 8000);
       els.canvasWidth.value = state.width;
       els.canvasHeight.value = state.height;
-      previewCanvas.width = state.width;
-      previewCanvas.height = state.height;
+      updatePreviewResolution();
       stage.style.width = state.width + 'px';
       stage.style.height = state.height + 'px';
       els.sizePill.textContent = `${state.width} x ${state.height} px`;
@@ -800,10 +828,11 @@
     }
 
     function renderPreview() {
-      renderBaseToContext(previewCtx, state.width, state.height);
+      renderBaseToContext(previewCtx, state.preview.width, state.preview.height);
     }
 
     function renderBaseToContext(ctx, width, height) {
+      const renderScale = Math.min(width / state.width, height / state.height);
       ctx.save();
       ctx.clearRect(0, 0, width, height);
       ctx.fillStyle = state.bgColor;
@@ -814,12 +843,30 @@
         return;
       }
 
-      ctx.filter = state.adjustments.blur > 0 ? `blur(${state.adjustments.blur}px)` : 'none';
+      const blur = state.adjustments.blur * renderScale;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.filter = blur > 0 ? `blur(${blur}px)` : 'none';
       drawImageFitted(ctx, state.source.img, width, height);
       ctx.filter = 'none';
       ctx.restore();
 
-      applyAdjustments(ctx, width, height);
+      if (needsPixelAdjustments()) applyAdjustments(ctx, width, height);
+    }
+
+    function needsPixelAdjustments() {
+      const adj = state.adjustments;
+      return adj.exposure !== 0 ||
+        adj.gamma !== 1 ||
+        adj.shadows !== 0 ||
+        adj.highlights !== 0 ||
+        adj.contrast !== 0 ||
+        adj.saturation !== 0 ||
+        adj.vibrance !== 0 ||
+        adj.temperature !== 0 ||
+        adj.tint !== 0 ||
+        adj.sharpness > 0 ||
+        adj.vignette > 0;
     }
 
     function drawImageFitted(ctx, img, width, height) {
@@ -853,6 +900,7 @@
       const adj = state.adjustments;
       const exposureFactor = Math.pow(2, adj.exposure);
       const gammaInv = 1 / Math.max(0.01, adj.gamma);
+      const exposureGamma = new Float32Array(256);
       const contrastValue = adj.contrast * 2.55;
       const contrastFactor = (259 * (contrastValue + 255)) / (255 * (259 - contrastValue));
       const shadowAmount = adj.shadows / 100;
@@ -865,48 +913,70 @@
       const centerX = width / 2;
       const centerY = height / 2;
       const maxDist = Math.sqrt(centerX * centerX + centerY * centerY);
+      const hasTone = shadowAmount !== 0 || highlightAmount !== 0;
+      const hasTempTint = temp !== 0 || tint !== 0;
+      const hasContrast = adj.contrast !== 0;
+      const hasVibrance = vibranceAmount !== 0;
+      const hasSaturation = satAmount !== 0;
+      const hasColour = hasVibrance || hasSaturation;
+      const hasVignette = vignette > 0;
+
+      for (let i = 0; i < 256; i++) {
+        exposureGamma[i] = 255 * Math.pow(clamp(i * exposureFactor, 0, 255) / 255, gammaInv);
+      }
 
       for (let i = 0; i < data.length; i += 4) {
-        let r = data[i] * exposureFactor;
-        let g = data[i + 1] * exposureFactor;
-        let b = data[i + 2] * exposureFactor;
+        let r = exposureGamma[data[i]];
+        let g = exposureGamma[data[i + 1]];
+        let b = exposureGamma[data[i + 2]];
 
-        r = 255 * Math.pow(clamp(r, 0, 255) / 255, gammaInv);
-        g = 255 * Math.pow(clamp(g, 0, 255) / 255, gammaInv);
-        b = 255 * Math.pow(clamp(b, 0, 255) / 255, gammaInv);
+        if (hasTone) {
+          const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+          if (shadowAmount !== 0) {
+            const shadowMask = (1 - luma) * (1 - luma);
+            r = toneAdjust(r, shadowAmount, shadowMask);
+            g = toneAdjust(g, shadowAmount, shadowMask);
+            b = toneAdjust(b, shadowAmount, shadowMask);
+          }
+          if (highlightAmount !== 0) {
+            const highlightMask = luma * luma;
+            r = toneAdjust(r, highlightAmount, highlightMask);
+            g = toneAdjust(g, highlightAmount, highlightMask);
+            b = toneAdjust(b, highlightAmount, highlightMask);
+          }
+        }
 
-        let luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-        const shadowMask = Math.pow(1 - luma, 2);
-        const highlightMask = Math.pow(luma, 2);
-        r = toneAdjust(r, shadowAmount, shadowMask);
-        g = toneAdjust(g, shadowAmount, shadowMask);
-        b = toneAdjust(b, shadowAmount, shadowMask);
-        r = toneAdjust(r, highlightAmount, highlightMask);
-        g = toneAdjust(g, highlightAmount, highlightMask);
-        b = toneAdjust(b, highlightAmount, highlightMask);
+        if (hasTempTint) {
+          r += temp * 0.62 + tint * 0.20;
+          g += tint * -0.42;
+          b += temp * -0.62 + tint * 0.20;
+        }
 
-        r += temp * 0.62 + tint * 0.20;
-        g += tint * -0.42;
-        b += temp * -0.62 + tint * 0.20;
+        if (hasContrast) {
+          r = contrastFactor * (r - 128) + 128;
+          g = contrastFactor * (g - 128) + 128;
+          b = contrastFactor * (b - 128) + 128;
+        }
 
-        r = contrastFactor * (r - 128) + 128;
-        g = contrastFactor * (g - 128) + 128;
-        b = contrastFactor * (b - 128) + 128;
+        if (hasColour) {
+          const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          if (hasVibrance) {
+            const maxChannel = Math.max(r, g, b);
+            const minChannel = Math.min(r, g, b);
+            const chroma = clamp((maxChannel - minChannel) / 255, 0, 1);
+            const vibranceScale = 1 + vibranceAmount * (1 - chroma) * 1.35;
+            r = luma + (r - luma) * vibranceScale;
+            g = luma + (g - luma) * vibranceScale;
+            b = luma + (b - luma) * vibranceScale;
+          }
+          if (hasSaturation) {
+            r = luma + (r - luma) * (1 + satAmount);
+            g = luma + (g - luma) * (1 + satAmount);
+            b = luma + (b - luma) * (1 + satAmount);
+          }
+        }
 
-        luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        const maxChannel = Math.max(r, g, b);
-        const minChannel = Math.min(r, g, b);
-        const chroma = clamp((maxChannel - minChannel) / 255, 0, 1);
-        const vibranceScale = 1 + vibranceAmount * (1 - chroma) * 1.35;
-        r = luma + (r - luma) * vibranceScale;
-        g = luma + (g - luma) * vibranceScale;
-        b = luma + (b - luma) * vibranceScale;
-
-        r = luma + (r - luma) * (1 + satAmount);
-        g = luma + (g - luma) * (1 + satAmount);
-        b = luma + (b - luma) * (1 + satAmount);
-
-        if (vignette > 0) {
+        if (hasVignette) {
           const pixel = i / 4;
           const x = pixel % width;
           const y = Math.floor(pixel / width);
@@ -1029,26 +1099,52 @@
       updateWatermarkElement();
     }
 
+    function setExporting(isExporting) {
+      state.exporting = isExporting;
+      els.exportPng.disabled = isExporting || !state.source;
+      els.exportJpg.disabled = isExporting || !state.source;
+      els.exportPng.textContent = isExporting ? 'Exporting...' : 'Export PNG';
+      els.exportJpg.textContent = isExporting ? 'Exporting...' : 'Export JPG';
+    }
+
+    function canvasToBlob(canvas, type, quality) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob(blob => {
+          if (blob) resolve(blob);
+          else reject(new Error('Image export failed.'));
+        }, type, quality);
+      });
+    }
+
     async function exportImage(type) {
-      if (!state.source) return;
+      if (!state.source || state.exporting) return;
+      setExporting(true);
       const canvas = document.createElement('canvas');
-      canvas.width = state.width;
-      canvas.height = state.height;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      renderBaseToContext(ctx, state.width, state.height);
-      await drawWatermarkToCanvas(ctx);
-      const isJpg = type === 'image/jpeg';
-      const quality = Number(els.jpgQuality.value) / 100;
-      const url = isJpg ? canvas.toDataURL(type, quality) : canvas.toDataURL(type);
-      const link = document.createElement('a');
-      const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g, '-');
-      const ext = isJpg ? 'jpg' : 'png';
-      const base = (state.source.name || 'photo').replace(/\.[^.]+$/, '').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'photo';
-      link.href = url;
-      link.download = `${base}-edited-${state.width}x${state.height}-${stamp}.${ext}`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      try {
+        canvas.width = state.width;
+        canvas.height = state.height;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        renderBaseToContext(ctx, state.width, state.height);
+        await drawWatermarkToCanvas(ctx);
+        const isJpg = type === 'image/jpeg';
+        const quality = Number(els.jpgQuality.value) / 100;
+        const blob = await canvasToBlob(canvas, type, isJpg ? quality : undefined);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g, '-');
+        const ext = isJpg ? 'jpg' : 'png';
+        const base = (state.source.name || 'photo').replace(/\.[^.]+$/, '').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'photo';
+        link.href = url;
+        link.download = `${base}-edited-${state.width}x${state.height}-${stamp}.${ext}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (error) {
+        alert('The image could not be exported at this size.');
+      } finally {
+        setExporting(false);
+      }
     }
 
     async function drawWatermarkToCanvas(ctx) {
@@ -1245,6 +1341,7 @@
     setCanvasSize(1200, 800, { resetWatermark: true });
     syncAdjustmentLabels();
     syncWatermarkControls();
+    setExporting(false);
     fitZoom();
     renderPreview();
   </script>
