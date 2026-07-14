@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SWM Pic Editor</title>
+  <style>
+    :root {
+      --bg: #111827;
+      --panel: #1f2937;
+      --panel-2: #253244;
+      --text: #f9fafb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+      --accent-2: #a78bfa;
+      --danger: #fb7185;
+      --border: rgba(255,255,255,0.14);
+      --shadow: 0 20px 70px rgba(0,0,0,0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(96,165,250,0.20), transparent 34rem),
+        radial-gradient(circle at top right, rgba(167,139,250,0.18), transparent 30rem),
+        var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    button, input, select { font: inherit; }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 14px;
+      color: var(--text);
+      background: var(--panel-2);
+      cursor: pointer;
+      transition: transform 0.12s ease, background 0.12s ease, opacity 0.12s ease;
+      user-select: none;
+      min-height: 42px;
+    }
+
+    button:hover { transform: translateY(-1px); background: #334155; }
+    button:active { transform: translateY(0); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+    .primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      font-weight: 700;
+    }
+
+    .primary:hover { background: linear-gradient(135deg, #7bb6ff, #b79bff); }
+    .danger { background: rgba(251,113,133,0.18); color: #fecdd3; }
+    .danger:hover { background: rgba(251,113,133,0.30); }
+
+    .app {
+      display: grid;
+      grid-template-columns: 320px 1fr 340px;
+      grid-template-rows: 100vh;
+      gap: 0;
+    }
+
+    aside {
+      background: rgba(17, 24, 39, 0.80);
+      backdrop-filter: blur(18px);
+      border-right: 1px solid var(--border);
+      padding: 18px;
+      overflow-y: auto;
+    }
+
+    aside.right {
+      border-right: 0;
+      border-left: 1px solid var(--border);
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 24px;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+    }
+
+    h2 {
+      margin: 22px 0 10px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+    }
+
+    p {
+      color: var(--muted);
+      margin: 0 0 14px;
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .field { margin-bottom: 12px; }
+
+    label {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 0 0 5px;
+      color: #d1d5db;
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .value {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    input[type="number"], input[type="text"], input[type="color"], select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      padding: 10px 11px;
+      outline: none;
+      min-height: 43px;
+    }
+
+    input[type="color"] { height: 43px; padding: 4px; }
+    input[type="range"] { width: 100%; }
+    input[type="checkbox"] { accent-color: var(--accent); }
+
+    input:focus, select:focus {
+      border-color: rgba(96,165,250,0.8);
+      box-shadow: 0 0 0 3px rgba(96,165,250,0.16);
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.045);
+      margin-bottom: 12px;
+    }
+
+    .toggle label {
+      margin: 0;
+      display: block;
+      cursor: pointer;
+    }
+
+    .button-stack { display: grid; gap: 10px; }
+    .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .button-row.three { grid-template-columns: 1fr 1fr 1fr; }
+
+    .file-zone {
+      border: 1.5px dashed rgba(255,255,255,0.22);
+      border-radius: 18px;
+      padding: 18px;
+      min-height: 132px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      background: rgba(255,255,255,0.045);
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .file-zone.dragging { border-color: var(--accent); background: rgba(96,165,250,0.12); }
+    .file-zone strong { display: block; margin-bottom: 4px; color: #e5e7eb; }
+    #photoInput { display: none; }
+
+    main {
+      position: relative;
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      overflow: hidden;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(17, 24, 39, 0.50);
+      backdrop-filter: blur(15px);
+    }
+
+    .topbar .left, .topbar .right-buttons {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 8px 11px;
+      background: rgba(255,255,255,0.06);
+      color: #d1d5db;
+      font-size: 13px;
+    }
+
+    .workspace {
+      position: relative;
+      overflow: auto;
+      padding: 38px;
+    }
+
+    .stage-wrap {
+      width: max-content;
+      margin: auto;
+      transform-origin: top left;
+    }
+
+    #stage {
+      position: relative;
+      width: 1200px;
+      height: 800px;
+      background: #ffffff;
+      background-image:
+        linear-gradient(45deg, rgba(0,0,0,0.035) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(0,0,0,0.035) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, rgba(0,0,0,0.035) 75%),
+        linear-gradient(-45deg, transparent 75%, rgba(0,0,0,0.035) 75%);
+      background-size: 28px 28px;
+      background-position: 0 0, 0 14px, 14px -14px, -14px 0px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    #previewCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .stage-empty {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: rgba(17,24,39,0.52);
+      font-weight: 800;
+      font-size: 26px;
+      letter-spacing: -0.02em;
+      pointer-events: none;
+    }
+
+    #watermarkBox {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 120px;
+      height: 39px;
+      transform-origin: center center;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+      z-index: 10;
+      outline: 2px solid transparent;
+    }
+
+    #watermarkBox:active { cursor: grabbing; }
+    #watermarkBox.active {
+      outline-color: var(--accent);
+      box-shadow: 0 0 0 6px rgba(96,165,250,0.22);
+    }
+
+    #watermarkBox img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .handle {
+      display: none;
+      position: absolute;
+      width: 15px;
+      height: 15px;
+      border: 2px solid #fff;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+      z-index: 11;
+    }
+
+    #watermarkBox.active .handle { display: block; }
+    .handle.nw { left: -8px; top: -8px; cursor: nwse-resize; }
+    .handle.ne { right: -8px; top: -8px; cursor: nesw-resize; }
+    .handle.sw { left: -8px; bottom: -8px; cursor: nesw-resize; }
+    .handle.se { right: -8px; bottom: -8px; cursor: nwse-resize; }
+
+    .hint {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255,255,255,0.045);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 1120px) {
+      body { overflow: auto; }
+      .app { grid-template-columns: 1fr; grid-template-rows: auto auto auto; min-height: 100vh; }
+      aside, aside.right { border: 0; border-bottom: 1px solid var(--border); max-height: none; }
+      main { min-height: 70vh; }
+      .workspace { padding: 22px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <h1>SWM Pic Editor</h1>
+      <p>Adjust a photo, place the SWM watermark, then export as PNG or JPG.</p>
+
+      <h2>Source image</h2>
+      <div id="dropZone" class="file-zone">
+        <div>
+          <strong>Drop photo here</strong>
+          <span>or click to choose a file</span>
+        </div>
+      </div>
+      <input id="photoInput" type="file" accept="image/*" />
+
+      <h2>Output resolution</h2>
+      <div class="row">
+        <div class="field">
+          <label for="canvasWidth">Width px</label>
+          <input id="canvasWidth" type="number" min="50" max="8000" step="1" value="1200" />
+        </div>
+        <div class="field">
+          <label for="canvasHeight">Height px</label>
+          <input id="canvasHeight" type="number" min="50" max="8000" step="1" value="800" />
+        </div>
+      </div>
+      <div class="button-row">
+        <button id="applySize">Apply Size</button>
+        <button id="matchImage">Match Image</button>
+      </div>
+
+      <div class="field" style="margin-top: 12px;">
+        <label for="fitMode">Image fit</label>
+        <select id="fitMode">
+          <option value="cover">Fill canvas</option>
+          <option value="contain">Fit inside</option>
+          <option value="stretch">Stretch</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="bgColor">Background colour</label>
+        <input id="bgColor" type="color" value="#ffffff" />
+      </div>
+
+      <h2>View</h2>
+      <div class="field">
+        <label for="zoom">Workspace zoom <span id="zoomValue" class="value">70%</span></label>
+        <input id="zoom" type="range" min="5" max="150" value="70" />
+      </div>
+      <div class="button-row">
+        <button id="zoomFit">Fit</button>
+        <button id="zoom100">100%</button>
+      </div>
+
+      <h2>Transform</h2>
+      <div class="button-row three">
+        <button id="rotateLeft">Left</button>
+        <button id="rotateRight">Right</button>
+        <button id="resetTransform">Reset</button>
+      </div>
+      <div class="button-row" style="margin-top: 10px;">
+        <button id="flipX">Flip X</button>
+        <button id="flipY">Flip Y</button>
+      </div>
+    </aside>
+
+    <main>
+      <div class="topbar">
+        <div class="left">
+          <span id="sizePill" class="pill">1200 x 800 px</span>
+          <span id="filePill" class="pill">No photo loaded</span>
+        </div>
+        <div class="right-buttons">
+          <button id="resetAll" class="danger">Reset</button>
+          <button id="exportJpg" class="primary" disabled>Export JPG</button>
+          <button id="exportPng" class="primary" disabled>Export PNG</button>
+        </div>
+      </div>
+      <div id="workspace" class="workspace">
+        <div id="stageWrap" class="stage-wrap">
+          <div id="stage" aria-label="Photo editing canvas">
+            <canvas id="previewCanvas" width="1200" height="800"></canvas>
+            <div id="watermarkBox" class="active hidden" aria-label="SWM watermark layer">
+              <img id="watermarkImage" src="swm-logo.png" alt="SWM watermark" />
+              <div class="handle nw" data-action="resize" data-corner="nw"></div>
+              <div class="handle ne" data-action="resize" data-corner="ne"></div>
+              <div class="handle sw" data-action="resize" data-corner="sw"></div>
+              <div class="handle se" data-action="resize" data-corner="se"></div>
+            </div>
+            <div id="emptyStage" class="stage-empty">Drop a photo</div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="right">
+      <h2>Photo adjustments</h2>
+      <div class="field">
+        <label for="exposure">Exposure <span id="exposureValue" class="value">0.00 EV</span></label>
+        <input id="exposure" type="range" min="-2" max="2" step="0.01" value="0" />
+      </div>
+      <div class="field">
+        <label for="gamma">Gamma <span id="gammaValue" class="value">1.00</span></label>
+        <input id="gamma" type="range" min="0.25" max="3" step="0.01" value="1" />
+      </div>
+      <div class="field">
+        <label for="shadows">Shadows <span id="shadowsValue" class="value">0</span></label>
+        <input id="shadows" type="range" min="-100" max="100" step="1" value="0" />
+      </div>
+      <div class="field">
+        <label for="highlights">Highlights <span id="highlightsValue" class="value">0</span></label>
+        <input id="highlights" type="range" min="-100" max="100" step="1" value="0" />
+      </div>
+      <div class="field">
+        <label for="contrast">Contrast <span id="contrastValue" class="value">0</span></label>
+        <input id="contrast" type="range" min="-100" max="100" step="1" value="0" />
+      </div>
+      <div class="field">
+        <label for="saturation">Saturation <span id="saturationValue" class="value">0</span></label>
+        <input id="saturation" type="range" min="-100" max="100" step="1" value="0" />
+      </div>
+      <div class="field">
+        <label for="vibrance">Vibrance <span id="vibranceValue" class="value">0</span></label>
+        <input id="vibrance" type="range" min="-100" max="100" step="1" value="0" />
+      </div>
+      <div class="field">
+        <label for="temperature">Temperature <span id="temperatureValue" class="value">0</span></label>
+        <input id="temperature" type="range" min="-100" max="100" step="1" value="0" />
+      </div>
+      <div class="field">
+        <label for="tint">Tint <span id="tintValue" class="value">0</span></label>
+        <input id="tint" type="range" min="-100" max="100" step="1" value="0" />
+      </div>
+      <div class="field">
+        <label for="blur">Blur <span id="blurValue" class="value">0.0 px</span></label>
+        <input id="blur" type="range" min="0" max="12" step="0.1" value="0" />
+      </div>
+      <div class="field">
+        <label for="sharpness">Sharpness <span id="sharpnessValue" class="value">0</span></label>
+        <input id="sharpness" type="range" min="0" max="100" step="1" value="0" />
+      </div>
+      <div class="field">
+        <label for="vignette">Vignette <span id="vignetteValue" class="value">0</span></label>
+        <input id="vignette" type="range" min="0" max="100" step="1" value="0" />
+      </div>
+      <button id="resetAdjustments" style="width: 100%;">Reset Adjustments</button>
+
+      <h2>SWM watermark</h2>
+      <div class="toggle">
+        <label for="watermarkEnabled">Use watermark</label>
+        <input id="watermarkEnabled" type="checkbox" checked />
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="watermarkX">X px</label>
+          <input id="watermarkX" type="number" step="1" value="1056" />
+        </div>
+        <div class="field">
+          <label for="watermarkY">Y px</label>
+          <input id="watermarkY" type="number" step="1" value="745" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="watermarkSize">Size <span id="watermarkSizeValue" class="value">10%</span></label>
+        <input id="watermarkSize" type="range" min="1" max="60" step="0.5" value="10" />
+      </div>
+      <div class="field">
+        <label for="watermarkOpacity">Opacity <span id="watermarkOpacityValue" class="value">100%</span></label>
+        <input id="watermarkOpacity" type="range" min="0" max="100" step="1" value="100" />
+      </div>
+      <div class="field">
+        <label for="watermarkRotation">Rotation <span id="watermarkRotationValue" class="value">0 deg</span></label>
+        <input id="watermarkRotation" type="range" min="-180" max="180" step="1" value="0" />
+      </div>
+      <div class="button-row">
+        <button id="resetWatermark">Reset Mark</button>
+        <button id="centerWatermark">Center</button>
+      </div>
+
+      <h2>JPG export</h2>
+      <div class="field">
+        <label for="jpgQuality">Quality <span id="jpgQualityValue" class="value">92%</span></label>
+        <input id="jpgQuality" type="range" min="40" max="100" step="1" value="92" />
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const stage = document.getElementById('stage');
+    const stageWrap = document.getElementById('stageWrap');
+    const workspace = document.getElementById('workspace');
+    const previewCanvas = document.getElementById('previewCanvas');
+    const previewCtx = previewCanvas.getContext('2d', { willReadFrequently: true });
+    const dropZone = document.getElementById('dropZone');
+    const photoInput = document.getElementById('photoInput');
+    const watermarkBox = document.getElementById('watermarkBox');
+    const watermarkImage = document.getElementById('watermarkImage');
+    const emptyStage = document.getElementById('emptyStage');
+
+    const defaults = {
+      exposure: 0,
+      gamma: 1,
+      shadows: 0,
+      highlights: 0,
+      contrast: 0,
+      saturation: 0,
+      vibrance: 0,
+      temperature: 0,
+      tint: 0,
+      blur: 0,
+      sharpness: 0,
+      vignette: 0
+    };
+
+    const state = {
+      width: 1200,
+      height: 800,
+      bgColor: '#ffffff',
+      fitMode: 'cover',
+      zoom: 0.7,
+      source: null,
+      rotation: 0,
+      flipX: false,
+      flipY: false,
+      adjustments: { ...defaults },
+      watermark: {
+        enabled: true,
+        x: 1056,
+        y: 745,
+        w: 120,
+        h: 38.7,
+        opacity: 1,
+        rotation: 0,
+        custom: false
+      },
+      drag: null,
+      renderQueued: false
+    };
+
+    const els = {
+      canvasWidth: document.getElementById('canvasWidth'),
+      canvasHeight: document.getElementById('canvasHeight'),
+      applySize: document.getElementById('applySize'),
+      matchImage: document.getElementById('matchImage'),
+      fitMode: document.getElementById('fitMode'),
+      bgColor: document.getElementById('bgColor'),
+      zoom: document.getElementById('zoom'),
+      zoomValue: document.getElementById('zoomValue'),
+      zoomFit: document.getElementById('zoomFit'),
+      zoom100: document.getElementById('zoom100'),
+      rotateLeft: document.getElementById('rotateLeft'),
+      rotateRight: document.getElementById('rotateRight'),
+      resetTransform: document.getElementById('resetTransform'),
+      flipX: document.getElementById('flipX'),
+      flipY: document.getElementById('flipY'),
+      sizePill: document.getElementById('sizePill'),
+      filePill: document.getElementById('filePill'),
+      resetAll: document.getElementById('resetAll'),
+      exportJpg: document.getElementById('exportJpg'),
+      exportPng: document.getElementById('exportPng'),
+      exposure: document.getElementById('exposure'),
+      gamma: document.getElementById('gamma'),
+      shadows: document.getElementById('shadows'),
+      highlights: document.getElementById('highlights'),
+      contrast: document.getElementById('contrast'),
+      saturation: document.getElementById('saturation'),
+      vibrance: document.getElementById('vibrance'),
+      temperature: document.getElementById('temperature'),
+      tint: document.getElementById('tint'),
+      blur: document.getElementById('blur'),
+      sharpness: document.getElementById('sharpness'),
+      vignette: document.getElementById('vignette'),
+      resetAdjustments: document.getElementById('resetAdjustments'),
+      exposureValue: document.getElementById('exposureValue'),
+      gammaValue: document.getElementById('gammaValue'),
+      shadowsValue: document.getElementById('shadowsValue'),
+      highlightsValue: document.getElementById('highlightsValue'),
+      contrastValue: document.getElementById('contrastValue'),
+      saturationValue: document.getElementById('saturationValue'),
+      vibranceValue: document.getElementById('vibranceValue'),
+      temperatureValue: document.getElementById('temperatureValue'),
+      tintValue: document.getElementById('tintValue'),
+      blurValue: document.getElementById('blurValue'),
+      sharpnessValue: document.getElementById('sharpnessValue'),
+      vignetteValue: document.getElementById('vignetteValue'),
+      watermarkEnabled: document.getElementById('watermarkEnabled'),
+      watermarkX: document.getElementById('watermarkX'),
+      watermarkY: document.getElementById('watermarkY'),
+      watermarkSize: document.getElementById('watermarkSize'),
+      watermarkSizeValue: document.getElementById('watermarkSizeValue'),
+      watermarkOpacity: document.getElementById('watermarkOpacity'),
+      watermarkOpacityValue: document.getElementById('watermarkOpacityValue'),
+      watermarkRotation: document.getElementById('watermarkRotation'),
+      watermarkRotationValue: document.getElementById('watermarkRotationValue'),
+      resetWatermark: document.getElementById('resetWatermark'),
+      centerWatermark: document.getElementById('centerWatermark'),
+      jpgQuality: document.getElementById('jpgQuality'),
+      jpgQualityValue: document.getElementById('jpgQualityValue')
+    };
+
+    const adjustmentInputs = [
+      'exposure',
+      'gamma',
+      'shadows',
+      'highlights',
+      'contrast',
+      'saturation',
+      'vibrance',
+      'temperature',
+      'tint',
+      'blur',
+      'sharpness',
+      'vignette'
+    ];
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      });
+    }
+
+    async function loadPhoto(file) {
+      if (!file || !file.type.startsWith('image/')) return;
+      const src = await readFileAsDataUrl(file);
+      const img = await loadImage(src);
+      state.source = {
+        name: file.name || 'photo',
+        src,
+        img,
+        naturalWidth: img.naturalWidth,
+        naturalHeight: img.naturalHeight
+      };
+      setCanvasSize(img.naturalWidth, img.naturalHeight, { resetWatermark: true });
+      els.filePill.textContent = `${state.source.name}`;
+      emptyStage.classList.add('hidden');
+      els.exportPng.disabled = false;
+      els.exportJpg.disabled = false;
+      fitZoom();
+      queueRender();
+    }
+
+    function setCanvasSize(width, height, options = {}) {
+      state.width = clamp(Math.round(width) || 1200, 50, 8000);
+      state.height = clamp(Math.round(height) || 800, 50, 8000);
+      els.canvasWidth.value = state.width;
+      els.canvasHeight.value = state.height;
+      previewCanvas.width = state.width;
+      previewCanvas.height = state.height;
+      stage.style.width = state.width + 'px';
+      stage.style.height = state.height + 'px';
+      els.sizePill.textContent = `${state.width} x ${state.height} px`;
+      if (options.resetWatermark || !state.watermark.custom) resetWatermarkPlacement();
+      updateZoom();
+      queueRender();
+    }
+
+    function updateZoom() {
+      stageWrap.style.transform = `scale(${state.zoom})`;
+      stageWrap.style.width = state.width * state.zoom + 'px';
+      stageWrap.style.height = state.height * state.zoom + 'px';
+      els.zoom.value = Math.round(state.zoom * 100);
+      els.zoomValue.textContent = `${Math.round(state.zoom * 100)}%`;
+    }
+
+    function fitZoom() {
+      const pad = 90;
+      const availableW = Math.max(200, workspace.clientWidth - pad);
+      const availableH = Math.max(200, workspace.clientHeight - pad);
+      state.zoom = clamp(Math.min(availableW / state.width, availableH / state.height), 0.05, 1.5);
+      updateZoom();
+    }
+
+    function resetWatermarkPlacement() {
+      const ratio = watermarkImage.naturalHeight && watermarkImage.naturalWidth
+        ? watermarkImage.naturalHeight / watermarkImage.naturalWidth
+        : 322 / 999;
+      const w = Math.max(24, state.width * 0.10);
+      const h = w * ratio;
+      const padX = state.width * 0.02;
+      const padY = state.height * 0.02;
+      state.watermark.x = Math.round(state.width - w - padX);
+      state.watermark.y = Math.round(state.height - h - padY);
+      state.watermark.w = w;
+      state.watermark.h = h;
+      state.watermark.opacity = 1;
+      state.watermark.rotation = 0;
+      state.watermark.custom = false;
+      syncWatermarkControls();
+      updateWatermarkElement();
+    }
+
+    function centerWatermark() {
+      state.watermark.x = Math.round((state.width - state.watermark.w) / 2);
+      state.watermark.y = Math.round((state.height - state.watermark.h) / 2);
+      state.watermark.custom = true;
+      syncWatermarkControls();
+      updateWatermarkElement();
+    }
+
+    function updateWatermarkElement() {
+      const wm = state.watermark;
+      watermarkBox.classList.toggle('hidden', !wm.enabled || !state.source);
+      watermarkBox.style.width = wm.w + 'px';
+      watermarkBox.style.height = wm.h + 'px';
+      watermarkBox.style.opacity = wm.opacity;
+      watermarkBox.style.transform = `translate(${wm.x}px, ${wm.y}px) rotate(${wm.rotation}deg)`;
+    }
+
+    function syncWatermarkControls() {
+      const wm = state.watermark;
+      els.watermarkEnabled.checked = wm.enabled;
+      els.watermarkX.value = Math.round(wm.x);
+      els.watermarkY.value = Math.round(wm.y);
+      els.watermarkSize.value = clamp((wm.w / state.width) * 100, 1, 60).toFixed(1);
+      els.watermarkSizeValue.textContent = `${Number(els.watermarkSize.value).toFixed(1).replace('.0', '')}%`;
+      els.watermarkOpacity.value = Math.round(wm.opacity * 100);
+      els.watermarkOpacityValue.textContent = `${Math.round(wm.opacity * 100)}%`;
+      els.watermarkRotation.value = Math.round(wm.rotation);
+      els.watermarkRotationValue.textContent = `${Math.round(wm.rotation)} deg`;
+    }
+
+    function syncAdjustmentLabels() {
+      els.exposureValue.textContent = `${state.adjustments.exposure.toFixed(2)} EV`;
+      els.gammaValue.textContent = state.adjustments.gamma.toFixed(2);
+      els.shadowsValue.textContent = Math.round(state.adjustments.shadows);
+      els.highlightsValue.textContent = Math.round(state.adjustments.highlights);
+      els.contrastValue.textContent = Math.round(state.adjustments.contrast);
+      els.saturationValue.textContent = Math.round(state.adjustments.saturation);
+      els.vibranceValue.textContent = Math.round(state.adjustments.vibrance);
+      els.temperatureValue.textContent = Math.round(state.adjustments.temperature);
+      els.tintValue.textContent = Math.round(state.adjustments.tint);
+      els.blurValue.textContent = `${state.adjustments.blur.toFixed(1)} px`;
+      els.sharpnessValue.textContent = Math.round(state.adjustments.sharpness);
+      els.vignetteValue.textContent = Math.round(state.adjustments.vignette);
+    }
+
+    function queueRender() {
+      if (state.renderQueued) return;
+      state.renderQueued = true;
+      requestAnimationFrame(() => {
+        state.renderQueued = false;
+        renderPreview();
+      });
+    }
+
+    function renderPreview() {
+      renderBaseToContext(previewCtx, state.width, state.height);
+    }
+
+    function renderBaseToContext(ctx, width, height) {
+      ctx.save();
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = state.bgColor;
+      ctx.fillRect(0, 0, width, height);
+
+      if (!state.source) {
+        ctx.restore();
+        return;
+      }
+
+      ctx.filter = state.adjustments.blur > 0 ? `blur(${state.adjustments.blur}px)` : 'none';
+      drawImageFitted(ctx, state.source.img, width, height);
+      ctx.filter = 'none';
+      ctx.restore();
+
+      applyAdjustments(ctx, width, height);
+    }
+
+    function drawImageFitted(ctx, img, width, height) {
+      const rotated = Math.abs(state.rotation % 180) === 90;
+      const sourceW = rotated ? img.naturalHeight : img.naturalWidth;
+      const sourceH = rotated ? img.naturalWidth : img.naturalHeight;
+      let drawW;
+      let drawH;
+
+      if (state.fitMode === 'stretch') {
+        drawW = rotated ? height : width;
+        drawH = rotated ? width : height;
+      } else {
+        const fit = state.fitMode === 'contain' ? Math.min : Math.max;
+        const scale = fit(width / sourceW, height / sourceH);
+        drawW = img.naturalWidth * scale;
+        drawH = img.naturalHeight * scale;
+      }
+
+      ctx.save();
+      ctx.translate(width / 2, height / 2);
+      ctx.scale(state.flipX ? -1 : 1, state.flipY ? -1 : 1);
+      ctx.rotate(state.rotation * Math.PI / 180);
+      ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+      ctx.restore();
+    }
+
+    function applyAdjustments(ctx, width, height) {
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+      const adj = state.adjustments;
+      const exposureFactor = Math.pow(2, adj.exposure);
+      const gammaInv = 1 / Math.max(0.01, adj.gamma);
+      const contrastValue = adj.contrast * 2.55;
+      const contrastFactor = (259 * (contrastValue + 255)) / (255 * (259 - contrastValue));
+      const shadowAmount = adj.shadows / 100;
+      const highlightAmount = adj.highlights / 100;
+      const satAmount = adj.saturation / 100;
+      const vibranceAmount = adj.vibrance / 100;
+      const temp = adj.temperature;
+      const tint = adj.tint;
+      const vignette = adj.vignette / 100;
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const maxDist = Math.sqrt(centerX * centerX + centerY * centerY);
+
+      for (let i = 0; i < data.length; i += 4) {
+        let r = data[i] * exposureFactor;
+        let g = data[i + 1] * exposureFactor;
+        let b = data[i + 2] * exposureFactor;
+
+        r = 255 * Math.pow(clamp(r, 0, 255) / 255, gammaInv);
+        g = 255 * Math.pow(clamp(g, 0, 255) / 255, gammaInv);
+        b = 255 * Math.pow(clamp(b, 0, 255) / 255, gammaInv);
+
+        let luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+        const shadowMask = Math.pow(1 - luma, 2);
+        const highlightMask = Math.pow(luma, 2);
+        r = toneAdjust(r, shadowAmount, shadowMask);
+        g = toneAdjust(g, shadowAmount, shadowMask);
+        b = toneAdjust(b, shadowAmount, shadowMask);
+        r = toneAdjust(r, highlightAmount, highlightMask);
+        g = toneAdjust(g, highlightAmount, highlightMask);
+        b = toneAdjust(b, highlightAmount, highlightMask);
+
+        r += temp * 0.62 + tint * 0.20;
+        g += tint * -0.42;
+        b += temp * -0.62 + tint * 0.20;
+
+        r = contrastFactor * (r - 128) + 128;
+        g = contrastFactor * (g - 128) + 128;
+        b = contrastFactor * (b - 128) + 128;
+
+        luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        const maxChannel = Math.max(r, g, b);
+        const minChannel = Math.min(r, g, b);
+        const chroma = clamp((maxChannel - minChannel) / 255, 0, 1);
+        const vibranceScale = 1 + vibranceAmount * (1 - chroma) * 1.35;
+        r = luma + (r - luma) * vibranceScale;
+        g = luma + (g - luma) * vibranceScale;
+        b = luma + (b - luma) * vibranceScale;
+
+        r = luma + (r - luma) * (1 + satAmount);
+        g = luma + (g - luma) * (1 + satAmount);
+        b = luma + (b - luma) * (1 + satAmount);
+
+        if (vignette > 0) {
+          const pixel = i / 4;
+          const x = pixel % width;
+          const y = Math.floor(pixel / width);
+          const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2) / maxDist;
+          const vignetteMask = smoothstep(0.32, 1, dist) * vignette * 0.75;
+          r *= 1 - vignetteMask;
+          g *= 1 - vignetteMask;
+          b *= 1 - vignetteMask;
+        }
+
+        data[i] = clamp(Math.round(r), 0, 255);
+        data[i + 1] = clamp(Math.round(g), 0, 255);
+        data[i + 2] = clamp(Math.round(b), 0, 255);
+      }
+
+      if (adj.sharpness > 0) applySharpen(imageData, width, height, adj.sharpness / 100);
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    function toneAdjust(value, amount, mask) {
+      if (amount === 0) return value;
+      if (amount > 0) return value + (255 - value) * amount * 0.65 * mask;
+      return value + value * amount * 0.65 * mask;
+    }
+
+    function smoothstep(edge0, edge1, x) {
+      const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+      return t * t * (3 - 2 * t);
+    }
+
+    function applySharpen(imageData, width, height, amount) {
+      const src = new Uint8ClampedArray(imageData.data);
+      const dst = imageData.data;
+      const strength = amount * 0.85;
+      for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+          const i = (y * width + x) * 4;
+          for (let c = 0; c < 3; c++) {
+            const value =
+              src[i + c] * (1 + 4 * strength) -
+              src[i - 4 + c] * strength -
+              src[i + 4 + c] * strength -
+              src[i - width * 4 + c] * strength -
+              src[i + width * 4 + c] * strength;
+            dst[i + c] = clamp(Math.round(value), 0, 255);
+          }
+        }
+      }
+    }
+
+    function stagePointer(event) {
+      const rect = stage.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left) / state.zoom,
+        y: (event.clientY - rect.top) / state.zoom
+      };
+    }
+
+    function onWatermarkPointerDown(event) {
+      if (!state.watermark.enabled) return;
+      event.preventDefault();
+      watermarkBox.setPointerCapture(event.pointerId);
+      const pointer = stagePointer(event);
+      state.drag = {
+        action: event.target.dataset.action || 'move',
+        corner: event.target.dataset.corner || null,
+        startPointer: pointer,
+        start: { ...state.watermark }
+      };
+      window.addEventListener('pointermove', onWatermarkPointerMove);
+      window.addEventListener('pointerup', onWatermarkPointerUp, { once: true });
+    }
+
+    function onWatermarkPointerMove(event) {
+      const drag = state.drag;
+      if (!drag) return;
+      const pointer = stagePointer(event);
+      const dx = pointer.x - drag.startPointer.x;
+      const dy = pointer.y - drag.startPointer.y;
+      const wm = state.watermark;
+
+      if (drag.action === 'move') {
+        wm.x = drag.start.x + dx;
+        wm.y = drag.start.y + dy;
+      }
+
+      if (drag.action === 'resize') {
+        resizeWatermark(drag.start, drag.corner, dx, dy);
+      }
+
+      wm.custom = true;
+      syncWatermarkControls();
+      updateWatermarkElement();
+    }
+
+    function onWatermarkPointerUp() {
+      state.drag = null;
+      window.removeEventListener('pointermove', onWatermarkPointerMove);
+    }
+
+    function resizeWatermark(start, corner, dx, dy) {
+      const ratio = start.h / start.w;
+      const horizontalDelta = corner.includes('e') ? dx : -dx;
+      const verticalDelta = (corner.includes('s') ? dy : -dy) / ratio;
+      const delta = Math.abs(horizontalDelta) > Math.abs(verticalDelta) ? horizontalDelta : verticalDelta;
+      const w = clamp(start.w + delta, 18, state.width * 1.5);
+      const h = w * ratio;
+      state.watermark.w = w;
+      state.watermark.h = h;
+      state.watermark.x = corner.includes('w') ? start.x + (start.w - w) : start.x;
+      state.watermark.y = corner.includes('n') ? start.y + (start.h - h) : start.y;
+    }
+
+    function setWatermarkSizePercent(percent) {
+      const ratio = state.watermark.h / state.watermark.w || 322 / 999;
+      state.watermark.w = state.width * (percent / 100);
+      state.watermark.h = state.watermark.w * ratio;
+      state.watermark.custom = true;
+      syncWatermarkControls();
+      updateWatermarkElement();
+    }
+
+    async function exportImage(type) {
+      if (!state.source) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = state.width;
+      canvas.height = state.height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      renderBaseToContext(ctx, state.width, state.height);
+      await drawWatermarkToCanvas(ctx);
+      const isJpg = type === 'image/jpeg';
+      const quality = Number(els.jpgQuality.value) / 100;
+      const url = isJpg ? canvas.toDataURL(type, quality) : canvas.toDataURL(type);
+      const link = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g, '-');
+      const ext = isJpg ? 'jpg' : 'png';
+      const base = (state.source.name || 'photo').replace(/\.[^.]+$/, '').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'photo';
+      link.href = url;
+      link.download = `${base}-edited-${state.width}x${state.height}-${stamp}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+
+    async function drawWatermarkToCanvas(ctx) {
+      const wm = state.watermark;
+      if (!wm.enabled) return;
+      const img = watermarkImage.complete && watermarkImage.naturalWidth
+        ? watermarkImage
+        : await loadImage(watermarkImage.src);
+      ctx.save();
+      ctx.globalAlpha = wm.opacity;
+      ctx.translate(wm.x + wm.w / 2, wm.y + wm.h / 2);
+      ctx.rotate(wm.rotation * Math.PI / 180);
+      ctx.drawImage(img, -wm.w / 2, -wm.h / 2, wm.w, wm.h);
+      ctx.restore();
+    }
+
+    function resetAdjustments() {
+      state.adjustments = { ...defaults };
+      adjustmentInputs.forEach(id => {
+        els[id].value = defaults[id];
+      });
+      syncAdjustmentLabels();
+      queueRender();
+    }
+
+    function resetAll() {
+      state.rotation = 0;
+      state.flipX = false;
+      state.flipY = false;
+      resetAdjustments();
+      resetWatermarkPlacement();
+      queueRender();
+    }
+
+    function addSliderDoubleClickReset(slider, defaultValue) {
+      slider.addEventListener('dblclick', () => {
+        slider.value = defaultValue;
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+
+    dropZone.addEventListener('click', () => photoInput.click());
+    photoInput.addEventListener('change', event => loadPhoto(event.target.files[0]));
+
+    ['dragenter', 'dragover'].forEach(type => {
+      dropZone.addEventListener(type, event => {
+        event.preventDefault();
+        dropZone.classList.add('dragging');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(type => {
+      dropZone.addEventListener(type, event => {
+        event.preventDefault();
+        dropZone.classList.remove('dragging');
+      });
+    });
+
+    dropZone.addEventListener('drop', event => loadPhoto(event.dataTransfer.files[0]));
+
+    els.applySize.addEventListener('click', () => {
+      setCanvasSize(Number(els.canvasWidth.value), Number(els.canvasHeight.value));
+      fitZoom();
+    });
+
+    els.matchImage.addEventListener('click', () => {
+      if (!state.source) return;
+      const rotated = Math.abs(state.rotation % 180) === 90;
+      const width = rotated ? state.source.naturalHeight : state.source.naturalWidth;
+      const height = rotated ? state.source.naturalWidth : state.source.naturalHeight;
+      setCanvasSize(width, height, { resetWatermark: true });
+      fitZoom();
+    });
+
+    els.fitMode.addEventListener('input', () => {
+      state.fitMode = els.fitMode.value;
+      queueRender();
+    });
+
+    els.bgColor.addEventListener('input', () => {
+      state.bgColor = els.bgColor.value || '#ffffff';
+      queueRender();
+    });
+
+    els.zoom.addEventListener('input', () => {
+      state.zoom = Number(els.zoom.value) / 100;
+      updateZoom();
+    });
+
+    els.zoomFit.addEventListener('click', fitZoom);
+    els.zoom100.addEventListener('click', () => { state.zoom = 1; updateZoom(); });
+
+    els.rotateLeft.addEventListener('click', () => {
+      state.rotation = (state.rotation + 270) % 360;
+      queueRender();
+    });
+
+    els.rotateRight.addEventListener('click', () => {
+      state.rotation = (state.rotation + 90) % 360;
+      queueRender();
+    });
+
+    els.resetTransform.addEventListener('click', () => {
+      state.rotation = 0;
+      state.flipX = false;
+      state.flipY = false;
+      queueRender();
+    });
+
+    els.flipX.addEventListener('click', () => {
+      state.flipX = !state.flipX;
+      queueRender();
+    });
+
+    els.flipY.addEventListener('click', () => {
+      state.flipY = !state.flipY;
+      queueRender();
+    });
+
+    adjustmentInputs.forEach(id => {
+      els[id].addEventListener('input', () => {
+        state.adjustments[id] = Number(els[id].value);
+        syncAdjustmentLabels();
+        queueRender();
+      });
+      addSliderDoubleClickReset(els[id], defaults[id]);
+    });
+
+    els.resetAdjustments.addEventListener('click', resetAdjustments);
+    els.resetAll.addEventListener('click', resetAll);
+
+    els.watermarkEnabled.addEventListener('input', () => {
+      state.watermark.enabled = els.watermarkEnabled.checked;
+      syncWatermarkControls();
+      updateWatermarkElement();
+    });
+
+    els.watermarkX.addEventListener('input', () => {
+      state.watermark.x = Number(els.watermarkX.value) || 0;
+      state.watermark.custom = true;
+      updateWatermarkElement();
+    });
+
+    els.watermarkY.addEventListener('input', () => {
+      state.watermark.y = Number(els.watermarkY.value) || 0;
+      state.watermark.custom = true;
+      updateWatermarkElement();
+    });
+
+    els.watermarkSize.addEventListener('input', () => {
+      setWatermarkSizePercent(Number(els.watermarkSize.value) || 10);
+    });
+
+    els.watermarkOpacity.addEventListener('input', () => {
+      state.watermark.opacity = Number(els.watermarkOpacity.value) / 100;
+      state.watermark.custom = true;
+      syncWatermarkControls();
+      updateWatermarkElement();
+    });
+
+    els.watermarkRotation.addEventListener('input', () => {
+      state.watermark.rotation = Number(els.watermarkRotation.value) || 0;
+      state.watermark.custom = true;
+      syncWatermarkControls();
+      updateWatermarkElement();
+    });
+
+    els.resetWatermark.addEventListener('click', resetWatermarkPlacement);
+    els.centerWatermark.addEventListener('click', centerWatermark);
+
+    els.jpgQuality.addEventListener('input', () => {
+      els.jpgQualityValue.textContent = `${els.jpgQuality.value}%`;
+    });
+
+    els.exportPng.addEventListener('click', () => exportImage('image/png'));
+    els.exportJpg.addEventListener('click', () => exportImage('image/jpeg'));
+
+    watermarkBox.addEventListener('pointerdown', onWatermarkPointerDown);
+
+    watermarkImage.addEventListener('load', () => {
+      if (!state.watermark.custom) resetWatermarkPlacement();
+    });
+
+    window.addEventListener('resize', () => {
+      if (Number(els.zoom.value) !== 100) fitZoom();
+    });
+
+    addSliderDoubleClickReset(els.zoom, 70);
+    addSliderDoubleClickReset(els.watermarkSize, 10);
+    addSliderDoubleClickReset(els.watermarkOpacity, 100);
+    addSliderDoubleClickReset(els.watermarkRotation, 0);
+    addSliderDoubleClickReset(els.jpgQuality, 92);
+
+    setCanvasSize(1200, 800, { resetWatermark: true });
+    syncAdjustmentLabels();
+    syncWatermarkControls();
+    fitZoom();
+    renderPreview();
+  </script>
+</body>
+</html>

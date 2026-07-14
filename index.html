@@ -77,46 +77,6 @@
       to { transform: translate3d(4rem, -2rem, 0) rotate(18deg); }
     }
 
-
-    .top-collage-link {
-      position: fixed;
-      top: 24px;
-      right: 24px;
-      z-index: 20;
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      min-height: 44px;
-      padding: 0 18px;
-      border-radius: 999px;
-      color: #253153;
-      background: rgba(255, 255, 255, 0.68);
-      border: 1px solid rgba(49, 91, 206, 0.15);
-      box-shadow: 0 12px 34px rgba(16, 21, 37, 0.07);
-      backdrop-filter: blur(18px);
-      text-decoration: none;
-      font-size: 0.92rem;
-      font-weight: 850;
-      letter-spacing: -0.01em;
-      transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
-    }
-
-    .top-collage-link::before {
-      content: "";
-      width: 9px;
-      height: 9px;
-      border-radius: 999px;
-      background: linear-gradient(135deg, var(--blue), var(--purple));
-      box-shadow: 0 0 0 4px rgba(22, 140, 230, 0.12);
-      flex: 0 0 auto;
-    }
-
-    .top-collage-link:hover {
-      transform: translateY(-2px);
-      border-color: rgba(134, 39, 216, 0.28);
-      box-shadow: 0 16px 42px rgba(16, 21, 37, 0.1);
-    }
-
     .page {
       position: relative;
       z-index: 1;
@@ -374,16 +334,20 @@
       left: 0;
       right: 0;
       bottom: 0;
-      height: 108px;
+      height: 98px;
       opacity: 0.42;
       overflow: hidden;
-      pointer-events: none;
     }
 
     .wave svg {
-      width: 100%;
+      width: 180%;
       height: 100%;
-      display: block;
+      animation: slide 8s linear infinite;
+    }
+
+    @keyframes slide {
+      from { transform: translateX(0); }
+      to { transform: translateX(-44%); }
     }
 
     .footer-note {
@@ -408,14 +372,6 @@
     }
 
     @media (max-width: 880px) {
-      .top-collage-link {
-        position: relative;
-        top: auto;
-        right: auto;
-        margin: 0 auto 18px;
-        width: fit-content;
-      }
-
       .page {
         align-items: start;
         padding-top: 34px;
@@ -492,8 +448,6 @@
 </head>
 
 <body>
-
-  <a class="top-collage-link" href="https://shanewardmusic.github.io/SWM-Website/collagemaker_swm.html">Free online collage maker</a>
   <main class="page">
     <header class="top-brand" aria-label="Shane Ward Music">
       <img class="top-logo" src="swm-logo.png" alt="SWM logo for Shane Ward Music" />
@@ -516,6 +470,9 @@
         </p>
 
         <div class="actions" aria-label="Primary actions">
+          <a class="button primary" href="tuner.html">Free Tuner</a>
+          <a class="button secondary" href="collagemaker.html">Free Collage Maker</a>
+          <a class="button secondary" href="picedit.html">Free Image Adjuster</a>
           <a class="button primary" href="mailto:hello@shanewardmusic.com">Get in touch</a>
           <a class="button secondary" href="#updates">What&rsquo;s coming</a>
         </div>
@@ -548,43 +505,19 @@
 
   <div class="wave" aria-hidden="true">
     <svg viewBox="0 0 1200 120" preserveAspectRatio="none">
+      <path d="M0,74 C80,42 140,42 220,74 S360,106 440,74 580,42 660,74 800,106 880,74 1020,42 1100,74 1240,106 1320,74 L1320,120 L0,120 Z" fill="url(#swmGradient)" />
       <defs>
-        <linearGradient id="swmWaveGradientA" x1="0" x2="1200" y1="0" y2="0" gradientUnits="userSpaceOnUse">
+        <linearGradient id="swmGradient" x1="0" x2="1" y1="0" y2="0">
           <stop offset="0%" stop-color="#168CE6" />
-          <stop offset="50%" stop-color="#8627D8" />
-          <stop offset="100%" stop-color="#168CE6" />
-        </linearGradient>
-        <linearGradient id="swmWaveGradientB" x1="1200" x2="2400" y1="0" y2="0" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stop-color="#168CE6" />
-          <stop offset="50%" stop-color="#8627D8" />
-          <stop offset="100%" stop-color="#168CE6" />
-        </linearGradient>
-        <linearGradient id="swmWaveGradientC" x1="2400" x2="3600" y1="0" y2="0" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stop-color="#168CE6" />
-          <stop offset="50%" stop-color="#8627D8" />
-          <stop offset="100%" stop-color="#168CE6" />
+          <stop offset="50%" stop-color="#315BCE" />
+          <stop offset="100%" stop-color="#8627D8" />
         </linearGradient>
       </defs>
-
-      <g>
-        <animateTransform
-          attributeName="transform"
-          attributeType="XML"
-          type="translate"
-          from="0 0"
-          to="-1200 0"
-          dur="18s"
-          repeatCount="indefinite" />
-
-        <path d="M0,76 C180,38 420,38 600,76 S1020,114 1200,76 L1200,120 L0,120 Z" fill="url(#swmWaveGradientA)" />
-        <path d="M1200,76 C1380,38 1620,38 1800,76 S2220,114 2400,76 L2400,120 L1200,120 Z" fill="url(#swmWaveGradientB)" />
-        <path d="M2400,76 C2580,38 2820,38 3000,76 S3420,114 3600,76 L3600,120 L2400,120 Z" fill="url(#swmWaveGradientC)" />
-      </g>
     </svg>
   </div>
 
   <p class="footer-note">
-    © <span id="year"></span> Shane Ward Music.
+    © <span id="year"></span> Shane Ward Music. Built for the next thing.
   </p>
 
   <script>
