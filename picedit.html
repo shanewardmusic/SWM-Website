@@ -196,9 +196,9 @@
     }
 
     .topbar {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
       align-items: center;
-      justify-content: space-between;
       gap: 12px;
       padding: 14px 18px;
       border-bottom: 1px solid var(--border);
@@ -206,11 +206,30 @@
       backdrop-filter: blur(15px);
     }
 
-    .topbar .left, .topbar .right-buttons {
+    .topbar .left, .topbar .center, .topbar .right-buttons {
       display: flex;
       align-items: center;
       gap: 10px;
       flex-wrap: wrap;
+    }
+
+    .topbar .center { justify-content: center; }
+    .topbar .right-buttons { justify-content: flex-end; }
+
+    .compare-button {
+      min-width: 118px;
+      border: 1px solid rgba(96,165,250,0.36);
+      background: rgba(255,255,255,0.08);
+      font-weight: 800;
+    }
+
+    .compare-button:hover {
+      background: rgba(96,165,250,0.18);
+    }
+
+    .compare-button.active {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 12px 34px rgba(96,165,250,0.26);
     }
 
     .pill {
@@ -318,6 +337,7 @@
     .handle.ne { right: -8px; top: -8px; cursor: nesw-resize; }
     .handle.sw { left: -8px; bottom: -8px; cursor: nesw-resize; }
     .handle.se { right: -8px; bottom: -8px; cursor: nwse-resize; }
+    #stage.comparing #watermarkBox { display: none; }
 
     .hint {
       border: 1px solid var(--border);
@@ -337,7 +357,16 @@
       aside, aside.right { border: 0; border-bottom: 1px solid var(--border); max-height: none; }
       main { min-height: 70vh; }
       .workspace { padding: 22px; }
-      .topbar { align-items: flex-start; flex-direction: column; }
+      .topbar {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+      }
+      .topbar .left,
+      .topbar .center,
+      .topbar .right-buttons {
+        justify-content: flex-start;
+      }
+      .topbar .center { justify-content: center; }
     }
 
     @media (max-width: 900px) and (orientation: portrait) {
@@ -388,6 +417,7 @@
       }
 
       .topbar .left,
+      .topbar .center,
       .topbar .right-buttons {
         gap: 6px;
         flex-wrap: nowrap;
@@ -488,6 +518,9 @@
         <div class="left">
           <span id="sizePill" class="pill">1200 x 800 px</span>
           <span id="filePill" class="pill">No photo loaded</span>
+        </div>
+        <div class="center">
+          <button id="compareOriginal" class="compare-button" type="button" aria-pressed="false" title="Hold to view the original" disabled>Compare</button>
         </div>
         <div class="right-buttons">
           <button id="mobileOpenPhoto" class="mobile-only">Open Photo</button>
@@ -665,6 +698,7 @@
       },
       drag: null,
       imageDrag: null,
+      comparing: false,
       renderQueued: false,
       exporting: false
     };
@@ -687,6 +721,7 @@
       flipY: document.getElementById('flipY'),
       sizePill: document.getElementById('sizePill'),
       filePill: document.getElementById('filePill'),
+      compareOriginal: document.getElementById('compareOriginal'),
       mobileOpenPhoto: document.getElementById('mobileOpenPhoto'),
       resetAll: document.getElementById('resetAll'),
       exportJpg: document.getElementById('exportJpg'),
@@ -915,10 +950,14 @@
     }
 
     function renderPreview() {
-      renderBaseToContext(previewCtx, state.preview.width, state.preview.height);
+      renderBaseToContext(previewCtx, state.preview.width, state.preview.height, {
+        applyAdjustments: !state.comparing
+      });
     }
 
-    function renderBaseToContext(ctx, width, height) {
+    function renderBaseToContext(ctx, width, height, options = {}) {
+      const applyPhotoAdjustments = options.applyAdjustments !== false;
+      const adjustments = applyPhotoAdjustments ? state.adjustments : defaults;
       const renderScale = Math.min(width / state.width, height / state.height);
       ctx.save();
       ctx.clearRect(0, 0, width, height);
@@ -930,7 +969,7 @@
         return;
       }
 
-      const blur = state.adjustments.blur * renderScale;
+      const blur = adjustments.blur * renderScale;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.filter = blur > 0 ? `blur(${blur}px)` : 'none';
@@ -938,11 +977,11 @@
       ctx.filter = 'none';
       ctx.restore();
 
-      if (needsPixelAdjustments()) applyAdjustments(ctx, width, height);
+      if (applyPhotoAdjustments && needsPixelAdjustments(adjustments)) applyAdjustments(ctx, width, height, adjustments);
     }
 
-    function needsPixelAdjustments() {
-      const adj = state.adjustments;
+    function needsPixelAdjustments(adjustments = state.adjustments) {
+      const adj = adjustments;
       return adj.exposure !== 0 ||
         adj.gamma !== 1 ||
         adj.shadows !== 0 ||
@@ -984,10 +1023,10 @@
       ctx.restore();
     }
 
-    function applyAdjustments(ctx, width, height) {
+    function applyAdjustments(ctx, width, height, adjustments = state.adjustments) {
       const imageData = ctx.getImageData(0, 0, width, height);
       const data = imageData.data;
-      const adj = state.adjustments;
+      const adj = adjustments;
       const exposureFactor = Math.pow(2, adj.exposure);
       const gammaInv = 1 / Math.max(0.01, adj.gamma);
       const exposureGamma = new Float32Array(256);
@@ -1224,8 +1263,27 @@
       state.exporting = isExporting;
       els.exportPng.disabled = isExporting || !state.source;
       els.exportJpg.disabled = isExporting || !state.source;
+      els.compareOriginal.disabled = isExporting || !state.source;
       els.exportPng.textContent = isExporting ? 'Exporting...' : 'Export PNG';
       els.exportJpg.textContent = isExporting ? 'Exporting...' : 'Export JPG';
+    }
+
+    function beginCompare() {
+      if (!state.source || state.comparing) return;
+      state.comparing = true;
+      els.compareOriginal.classList.add('active');
+      els.compareOriginal.setAttribute('aria-pressed', 'true');
+      stage.classList.add('comparing');
+      renderPreview();
+    }
+
+    function endCompare() {
+      if (!state.comparing) return;
+      state.comparing = false;
+      els.compareOriginal.classList.remove('active');
+      els.compareOriginal.setAttribute('aria-pressed', 'false');
+      stage.classList.remove('comparing');
+      renderPreview();
     }
 
     function canvasToBlob(canvas, type, quality) {
@@ -1401,6 +1459,26 @@
 
     els.resetAdjustments.addEventListener('click', resetAdjustments);
     els.resetAll.addEventListener('click', resetAll);
+
+    els.compareOriginal.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      beginCompare();
+    });
+    window.addEventListener('pointerup', endCompare);
+    window.addEventListener('pointercancel', endCompare);
+    els.compareOriginal.addEventListener('keydown', event => {
+      if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) {
+        event.preventDefault();
+        beginCompare();
+      }
+    });
+    els.compareOriginal.addEventListener('keyup', event => {
+      if (event.key === ' ' || event.key === 'Enter') {
+        event.preventDefault();
+        endCompare();
+      }
+    });
+    els.compareOriginal.addEventListener('blur', endCompare);
 
     els.watermarkEnabled.addEventListener('input', () => {
       state.watermark.enabled = els.watermarkEnabled.checked;
