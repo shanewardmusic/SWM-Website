@@ -1,0 +1,1833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#111827" />
+  <title>Hierarchy Builder</title>
+  <style>
+    :root {
+      --bg: #111827;
+      --panel: #1f2937;
+      --panel-2: #253244;
+      --text: #f9fafb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+      --accent-2: #a78bfa;
+      --danger: #fb7185;
+      --border: rgba(255,255,255,0.14);
+      --shadow: 0 20px 70px rgba(0,0,0,0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { width: 100%; height: 100%; }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(96,165,250,0.20), transparent 34rem),
+        radial-gradient(circle at top right, rgba(167,139,250,0.18), transparent 30rem),
+        var(--bg);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    button, input, select, textarea { font: inherit; }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 14px;
+      color: var(--text);
+      background: var(--panel-2);
+      cursor: pointer;
+      transition: transform 0.12s ease, background 0.12s ease, opacity 0.12s ease;
+      user-select: none;
+    }
+
+    button:hover { transform: translateY(-1px); background: #334155; }
+    button:active { transform: translateY(0); }
+    button:disabled { opacity: 0.42; cursor: not-allowed; transform: none; }
+    button.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); font-weight: 750; }
+    button.primary:hover { background: linear-gradient(135deg, #7bb6ff, #b79bff); }
+    button.danger { color: #fecdd3; background: rgba(251,113,133,0.18); }
+    button.danger:hover { background: rgba(251,113,133,0.30); }
+    button.active { background: rgba(96,165,250,0.22); box-shadow: inset 0 0 0 1px rgba(96,165,250,0.7); }
+    button.icon-button { width: 42px; padding: 10px 0; }
+
+    .app {
+      height: 100%;
+      display: grid;
+      grid-template-columns: 300px minmax(0, 1fr) 320px;
+    }
+
+    aside {
+      padding: 18px;
+      overflow-y: auto;
+      background: rgba(17,24,39,0.82);
+      backdrop-filter: blur(18px);
+      border-right: 1px solid var(--border);
+      scrollbar-color: #475569 transparent;
+    }
+
+    aside.right { border-right: 0; border-left: 1px solid var(--border); }
+
+    h1 { margin: 0 0 6px; font-size: 24px; letter-spacing: -0.04em; line-height: 1.05; }
+    h2 { margin: 22px 0 10px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.13em; }
+    h3 { margin: 0 0 5px; font-size: 16px; }
+    p { margin: 0 0 14px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+
+    .eyebrow { color: #93c5fd; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    .helper { color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .hidden { display: none !important; }
+
+    .field { margin-bottom: 12px; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; align-items: end; }
+    .field-row.three { grid-template-columns: 1fr 1fr 1fr; }
+    .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 9px; }
+    .button-row.three { grid-template-columns: 1fr 1fr 1fr; }
+    .button-stack { display: grid; gap: 9px; }
+
+    label { display: block; margin-bottom: 5px; color: #d1d5db; font-size: 12px; font-weight: 680; }
+    input[type="text"], input[type="number"], input[type="color"], select, textarea {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      outline: 0;
+      color: var(--text);
+      background: rgba(255,255,255,0.06);
+      padding: 9px 10px;
+    }
+    textarea { min-height: 78px; resize: vertical; }
+    input[type="color"] { height: 40px; padding: 4px; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+    input:focus, select:focus, textarea:focus { border-color: rgba(96,165,250,0.8); box-shadow: 0 0 0 3px rgba(96,165,250,0.15); }
+    select option { color: #111827; }
+
+    .brand-card {
+      margin-top: 16px;
+      padding: 13px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(96,165,250,.10), rgba(167,139,250,.08));
+    }
+
+    .shortcut-list { display: grid; gap: 7px; }
+    .shortcut { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 11px; }
+    kbd { padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px; color: #dbeafe; background: rgba(255,255,255,.06); font: inherit; }
+
+    main { min-width: 0; display: grid; grid-template-rows: auto 1fr; overflow: hidden; position: relative; }
+
+    .topbar {
+      min-height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(17,24,39,0.55);
+      backdrop-filter: blur(15px);
+      z-index: 20;
+    }
+    .topbar-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .pill { padding: 8px 11px; border: 1px solid var(--border); border-radius: 999px; color: #d1d5db; background: rgba(255,255,255,.055); font-size: 12px; }
+
+    #viewport {
+      position: relative;
+      overflow: hidden;
+      touch-action: none;
+      cursor: default;
+      background-color: #f6f7fb;
+      background-image: linear-gradient(rgba(15,23,42,.055) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,.055) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+    #viewport.panning { cursor: grabbing; }
+    #viewport.linking { cursor: crosshair; }
+
+    #world {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 1px;
+      height: 1px;
+      transform-origin: 0 0;
+      overflow: visible;
+    }
+    #shapeLayer, #tileLayer, #textLayer { position: absolute; inset: 0; width: 1px; height: 1px; overflow: visible; }
+    #shapeLayer { z-index: 1; }
+    #linkLayer { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; z-index: 2; }
+    #titleWorld { position: absolute; z-index: 3; width: 520px; white-space: pre-wrap; color: #0f172a; font-size: 32px; font-weight: 850; letter-spacing: -.035em; cursor: grab; user-select: none; touch-action: none; }
+    #titleWorld:active { cursor: grabbing; }
+    #titleWorld.selected { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: 4px; }
+    #tileLayer { z-index: 4; }
+    #textLayer { z-index: 4; }
+
+    #alignmentGuides { position: absolute; inset: 0; z-index: 15; pointer-events: none; overflow: hidden; }
+    .alignment-guide { position: absolute; border-radius: 999px; background: rgba(124,58,237,.88); box-shadow: 0 0 0 1px rgba(255,255,255,.78), 0 0 12px rgba(124,58,237,.35); }
+    .alignment-guide.vertical { width: 1px; }
+    .alignment-guide.horizontal { height: 1px; }
+
+    .tile {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      overflow: visible;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+      box-shadow: 0 12px 32px rgba(15,23,42,.13);
+      transition: box-shadow .12s ease;
+    }
+    .tile:active { cursor: grabbing; }
+    .tile.selected { outline: 2px solid var(--accent); outline-offset: 4px; box-shadow: 0 0 0 8px rgba(96,165,250,.17), 0 14px 36px rgba(15,23,42,.18); }
+    .tile-content { overflow: hidden; width: 100%; }
+    .tile-heading, .tile-subheading, .tile-note { overflow-wrap: anywhere; white-space: pre-wrap; }
+    .tile-subheading { margin-top: 4px; }
+    .tile-note { margin-top: 9px; opacity: .76; }
+    .tile-edit-field[contenteditable="true"] { cursor: text; outline: 0; border-radius: 5px; user-select: text; }
+    .tile-edit-field[contenteditable="true"]:hover { background: rgba(96,165,250,.07); }
+    .tile-edit-field[contenteditable="true"]:focus { background: rgba(96,165,250,.11); box-shadow: 0 0 0 2px rgba(96,165,250,.30); }
+
+    .text-box {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      overflow: visible;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+      transform-origin: 50% 50%;
+    }
+    .text-box:active { cursor: grabbing; }
+    .text-box.selected { outline: 2px solid var(--accent); outline-offset: 5px; border-radius: 5px; }
+    .text-box-content { width: 100%; max-height: 100%; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .text-box-content[contenteditable="true"] { cursor: text; user-select: text; outline: 0; border-radius: 5px; }
+    .text-box-content[contenteditable="true"]:focus { background: rgba(96,165,250,.11); box-shadow: 0 0 0 2px rgba(96,165,250,.30); }
+
+    .shape {
+      position: absolute;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+    }
+    .shape.locked { cursor: not-allowed; }
+    .shape.selected { outline: 2px solid var(--accent); outline-offset: 4px; }
+    .shape-lock { position: absolute; left: 8px; top: 6px; font-size: 14px; opacity: .62; pointer-events: none; }
+
+    .resize-handle {
+      position: absolute;
+      right: -8px;
+      bottom: -8px;
+      width: 16px;
+      height: 16px;
+      border: 2px solid white;
+      border-radius: 5px;
+      background: var(--accent);
+      box-shadow: 0 2px 8px rgba(15,23,42,.28);
+      cursor: nwse-resize;
+      z-index: 20;
+    }
+
+    .shape-resize-handle {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border: 2px solid white;
+      border-radius: 5px;
+      background: var(--accent);
+      box-shadow: 0 2px 8px rgba(15,23,42,.28);
+      z-index: 20;
+    }
+    .shape-resize-handle.nw { left: -8px; top: -8px; cursor: nwse-resize; }
+    .shape-resize-handle.ne { right: -8px; top: -8px; cursor: nesw-resize; }
+    .shape-resize-handle.se { right: -8px; bottom: -8px; cursor: nwse-resize; }
+    .shape-resize-handle.sw { left: -8px; bottom: -8px; cursor: nesw-resize; }
+
+    .connector {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      border: 2px solid white;
+      border-radius: 50%;
+      color: white;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 4px 14px rgba(37,99,235,.35);
+      font-size: 17px;
+      line-height: 1;
+      font-weight: 650;
+      z-index: 30;
+    }
+    .connector:hover { transform: scale(1.12); }
+    .connector[data-port="top"] { left: 50%; top: -34px; transform: translateX(-50%); }
+    .connector[data-port="bottom"] { left: 50%; bottom: -34px; transform: translateX(-50%); }
+    .connector[data-port="left"] { left: -34px; top: 50%; transform: translateY(-50%); }
+    .connector[data-port="right"] { right: -34px; top: 50%; transform: translateY(-50%); }
+    .connector[data-port="top"]:hover, .connector[data-port="bottom"]:hover { transform: translateX(-50%) scale(1.12); }
+    .connector[data-port="left"]:hover, .connector[data-port="right"]:hover { transform: translateY(-50%) scale(1.12); }
+    .connector.starting { box-shadow: 0 0 0 7px rgba(167,139,250,.24), 0 4px 14px rgba(37,99,235,.35); }
+
+    .link-visible { fill: none; stroke: #64748b; pointer-events: none; }
+    .link-hit { fill: none; stroke: transparent; stroke-width: 18; pointer-events: stroke; cursor: grab; }
+    .link-hit:active { cursor: grabbing; }
+    .link-selected { filter: drop-shadow(0 0 4px rgba(96,165,250,.9)); }
+    .link-snap-target { stroke: #a78bfa !important; filter: drop-shadow(0 0 6px rgba(167,139,250,.95)); }
+    .bend-handle { fill: var(--accent); stroke: white; stroke-width: 2; cursor: move; pointer-events: all; }
+    .link-anchor-dot { fill: #a78bfa; stroke: white; stroke-width: 2; pointer-events: none; }
+    .link-anchor-dot.draggable { cursor: grab; pointer-events: all; filter: drop-shadow(0 2px 5px rgba(76,29,149,.35)); }
+    .link-anchor-dot.draggable:active { cursor: grabbing; }
+    .branch-snap-preview { fill: rgba(167,139,250,.28); stroke: #7c3aed; stroke-width: 2; pointer-events: none; filter: drop-shadow(0 0 5px rgba(167,139,250,.65)); }
+
+    #selectionBox { position: absolute; display: none; border: 1.5px solid #3b82f6; background: rgba(96,165,250,.14); z-index: 11; pointer-events: none; }
+
+    .edge-arrow {
+      position: absolute;
+      z-index: 12;
+      width: 32px;
+      height: 32px;
+      display: none;
+      place-items: center;
+      border: 1px solid rgba(15,23,42,.10);
+      border-radius: 999px;
+      color: #475569;
+      background: rgba(255,255,255,.74);
+      box-shadow: 0 7px 24px rgba(15,23,42,.11);
+      backdrop-filter: blur(6px);
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .edge-arrow.show { display: grid; }
+    .edge-arrow.top { top: 14px; left: 50%; transform: translateX(-50%); }
+    .edge-arrow.bottom { bottom: 14px; left: 50%; transform: translateX(-50%); }
+    .edge-arrow.left { left: 14px; top: 50%; transform: translateY(-50%); }
+    .edge-arrow.right { right: 14px; top: 50%; transform: translateY(-50%); }
+
+    #emptyHint {
+      position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%,-50%);
+      width: min(420px, calc(100% - 40px));
+      padding: 25px;
+      border: 1px dashed rgba(15,23,42,.18);
+      border-radius: 22px;
+      color: #64748b;
+      background: rgba(255,255,255,.68);
+      text-align: center;
+      z-index: 0;
+    }
+
+    .inspector-empty {
+      padding: 18px;
+      border: 1px dashed var(--border);
+      border-radius: 16px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .selection-chip { display: inline-flex; padding: 5px 8px; border-radius: 999px; color: #bfdbfe; background: rgba(96,165,250,.14); font-size: 11px; font-weight: 750; }
+    .format-toggle { font-size: 14px; font-weight: 800; }
+    .format-toggle.italic { font-style: italic; }
+
+    .check-row { display: flex; align-items: center; gap: 8px; padding: 8px 4px; color: #d1d5db; font-size: 12px; }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 20px;
+      z-index: 300;
+      transform: translate(-50%, 18px);
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: white;
+      background: rgba(15,23,42,.94);
+      box-shadow: var(--shadow);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease, transform .18s ease;
+      font-size: 13px;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%,0); }
+
+    dialog {
+      width: min(720px, calc(100vw - 30px));
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      color: var(--text);
+      background: #172033;
+      box-shadow: var(--shadow);
+      padding: 0;
+    }
+    dialog::backdrop { background: rgba(2,6,23,.68); backdrop-filter: blur(5px); }
+    .dialog-head { display: flex; justify-content: space-between; gap: 15px; align-items: start; padding: 19px 20px 12px; }
+    .dialog-head h3 { font-size: 20px; }
+    .dialog-body { padding: 0 20px 20px; }
+    .dialog-body textarea { min-height: 310px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 12px; }
+
+    @media (max-width: 1100px) {
+      .app { grid-template-columns: 260px minmax(0,1fr); }
+      aside.right { position: fixed; right: 0; top: 0; bottom: 0; width: 310px; z-index: 80; box-shadow: -15px 0 45px rgba(0,0,0,.28); transform: translateX(calc(100% - 42px)); transition: transform .2s ease; }
+      aside.right:hover, aside.right:focus-within { transform: translateX(0); }
+    }
+    @media (max-width: 760px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+      aside.left { display: none; }
+      main { grid-row: 1 / -1; }
+      .topbar { padding-right: 48px; }
+      .topbar .label-text { display: none; }
+      aside.right { width: min(310px, 88vw); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="left">
+      <div class="eyebrow">SWM creative tools</div>
+      <h1>Hierarchy Builder</h1>
+      <p>Map organisations, families, systems and ideas on a flexible, infinite canvas.</p>
+
+      <h2>Project</h2>
+      <div class="field">
+        <label for="projectTitle">Main title</label>
+        <input id="projectTitle" type="text" value="Our organisation" />
+      </div>
+      <label class="check-row"><input id="showTitle" type="checkbox" checked /> Show main title on canvas</label>
+      <div class="field-row">
+        <div class="field"><label for="backgroundColor">Background</label><input id="backgroundColor" type="color" value="#f6f7fb" /></div>
+        <div class="field"><label for="defaultZoom">Default zoom</label><input id="defaultZoom" type="number" min="10" max="300" step="5" value="100" /></div>
+      </div>
+      <div class="button-row">
+        <button id="setDefaultView">Use current view</button>
+        <button id="resetProject" class="danger">Clear all</button>
+      </div>
+
+      <h2>Add</h2>
+      <div class="button-stack">
+        <button id="addTile" class="primary">＋ New tile</button>
+        <div class="button-row">
+          <button id="addLink">⌁ New link</button>
+          <button id="addShape">▢ New shape</button>
+        </div>
+        <button id="addTextBox">T＋ New text box</button>
+      </div>
+
+      <h2>Import & export</h2>
+      <div class="button-stack">
+        <div class="button-row">
+          <button id="exportPng">PNG</button>
+          <button id="exportSvg">SVG</button>
+        </div>
+        <button id="exportHtml" class="primary">Export read-only HTML</button>
+        <button id="importHtml">Import HTML / JSON</button>
+      </div>
+
+      <div class="brand-card">
+        <strong style="display:block;margin-bottom:5px">Infinite workspace</strong>
+        <span class="helper">Scroll to zoom. Drag the canvas to pan. Hold Shift and drag to select an area.</span>
+      </div>
+
+      <h2>Shortcuts</h2>
+      <div class="shortcut-list">
+        <div class="shortcut"><span>Copy / paste</span><span><kbd>⌘C</kbd> <kbd>⌘V</kbd></span></div>
+        <div class="shortcut"><span>Box select</span><kbd>Shift drag</kbd></div>
+        <div class="shortcut"><span>Add to selection</span><kbd>Shift click</kbd></div>
+        <div class="shortcut"><span>Remove selection</span><kbd>Delete</kbd></div>
+        <div class="shortcut"><span>Cancel linking</span><kbd>Esc</kbd></div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="topbar">
+        <div class="topbar-group">
+          <button id="topAddTile" class="primary">＋ <span class="label-text">Tile</span></button>
+          <button id="topAddLink">⌁ <span class="label-text">Link</span></button>
+          <button id="topAddShape">▢ <span class="label-text">Shape</span></button>
+          <button id="topAddTextBox">T＋ <span class="label-text">Text</span></button>
+          <span id="modePill" class="pill">Select mode</span>
+        </div>
+        <div class="topbar-group">
+          <button id="undoAction" disabled title="Undo (Command/Ctrl-Z)">↶ Undo</button>
+          <button id="zoomOut" class="icon-button" aria-label="Zoom out">−</button>
+          <span id="zoomLabel" class="pill">100%</span>
+          <button id="zoomIn" class="icon-button" aria-label="Zoom in">＋</button>
+          <button id="fitView">Fit</button>
+          <button id="homeView">Home</button>
+        </div>
+      </div>
+
+      <div id="viewport" aria-label="Hierarchy workspace">
+        <div id="world">
+          <div id="shapeLayer"></div>
+          <svg id="linkLayer" xmlns="http://www.w3.org/2000/svg"></svg>
+          <div id="titleWorld"></div>
+          <div id="tileLayer"></div>
+          <div id="textLayer"></div>
+        </div>
+        <div id="alignmentGuides"></div>
+        <div id="selectionBox"></div>
+        <button class="edge-arrow top" data-direction="top" aria-label="Content above">↑</button>
+        <button class="edge-arrow bottom" data-direction="bottom" aria-label="Content below">↓</button>
+        <button class="edge-arrow left" data-direction="left" aria-label="Content to the left">←</button>
+        <button class="edge-arrow right" data-direction="right" aria-label="Content to the right">→</button>
+        <div id="emptyHint" class="hidden"><strong>Start with a tile</strong><br />Build a connected hierarchy or place free-floating labels anywhere.</div>
+      </div>
+    </main>
+
+    <aside class="right">
+      <div class="eyebrow">Inspector</div>
+      <div id="inspector"></div>
+    </aside>
+  </div>
+
+  <dialog id="codeDialog">
+    <div class="dialog-head"><div><h3 id="dialogTitle">Export HTML</h3><p id="dialogHelp">Copy this complete, read-only hierarchy into a file or another page.</p></div><button id="closeDialog" aria-label="Close">✕</button></div>
+    <div class="dialog-body">
+      <textarea id="codeArea" spellcheck="false"></textarea>
+      <div class="dialog-actions">
+        <button id="dialogSecondary">Copy code</button>
+        <button id="dialogPrimary" class="primary">Download HTML</button>
+      </div>
+    </div>
+  </dialog>
+  <div id="toast" class="toast"></div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const $ = (selector, root = document) => root.querySelector(selector);
+      const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+      const clone = value => JSON.parse(JSON.stringify(value));
+      const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+      const uid = prefix => prefix + '-' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+      const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+      const escAttr = escapeHtml;
+      const fonts = ['Arial','Arial Black','Verdana','Tahoma','Trebuchet MS','Georgia','Times New Roman','Garamond','Courier New','Brush Script MT','Impact','Palatino Linotype','Lucida Sans Unicode','Segoe UI','system-ui'];
+      const textDefaults = {
+        heading: { font: 'Arial', size: 20, bold: true, italic: false, color: '#0f172a', align: 'left' },
+        subheading: { font: 'Arial', size: 14, bold: false, italic: false, color: '#334155', align: 'left' },
+        note: { font: 'Arial', size: 12, bold: false, italic: false, color: '#475569', align: 'left' }
+      };
+      const titleTextDefaults = { font: 'Arial', size: 32, bold: true, italic: false, color: '#0f172a', align: 'left' };
+      const textBoxTextDefaults = { font: 'Arial', size: 24, bold: false, italic: false, color: '#0f172a', align: 'left' };
+
+      const createTile = (x, y, heading = 'New tile') => ({
+        id: uid('tile'), x, y, w: 230, h: 132, heading, subheading: 'Subheading', note: 'Add a note or supporting detail.',
+        bg: '#ffffff', borderColor: '#cbd5e1', borderWidth: 1, radius: 18, padding: 18, text: clone(textDefaults)
+      });
+      const createShape = (x, y) => ({
+        id: uid('shape'), x, y, w: 360, h: 230, type: 'rectangle', bg: '#dbeafe', opacity: 0.65,
+        borderColor: '#93c5fd', borderWidth: 1, radius: 24, locked: false
+      });
+      const createTextBox = (x, y) => ({
+        id: uid('text'), x, y, w: 260, h: 80, text: 'New text box', rotation: 0,
+        style: clone(textBoxTextDefaults)
+      });
+
+      const chief = createTile(-115, -70, 'Executive Director');
+      chief.subheading = 'Leadership'; chief.note = 'Set any tile as the default centre.'; chief.bg = '#eff6ff'; chief.borderColor = '#60a5fa';
+      const people = createTile(-405, 190, 'People & Culture'); people.subheading = 'Operations'; people.note = 'Multiple links may share any connector.';
+      const product = createTile(175, 190, 'Product & Design'); product.subheading = 'Creative team'; product.note = 'Shift-click or drag to select multiple tiles.';
+
+      const initialState = {
+        version: 1,
+        title: 'Our organisation',
+        titleVisible: true,
+        titleX: -260,
+        titleY: -190,
+        titleText: clone(titleTextDefaults),
+        bgColor: '#f6f7fb',
+        defaultCenterId: chief.id,
+        defaultZoom: 1,
+        defaultCamera: null,
+        tiles: [chief, people, product],
+        shapes: [],
+        textBoxes: [],
+        links: [
+          { id: uid('link'), from: {kind:'tile', id:chief.id, port:'bottom'}, to: {kind:'tile', id:people.id, port:'top'}, type:'elbow', flow:'vertical', dashed:false, color:'#64748b', width:2.5, bends:[] },
+          { id: uid('link'), from: {kind:'tile', id:chief.id, port:'bottom'}, to: {kind:'tile', id:product.id, port:'top'}, type:'curved', flow:'vertical', dashed:false, color:'#64748b', width:2.5, bends:[] }
+        ]
+      };
+
+      let state = clone(initialState);
+      let camera = { x: 0, y: 0, zoom: 1 };
+      let selectedTiles = new Set();
+      let selectedShapeId = null;
+      let selectedTextBoxId = null;
+      let selectedLinkId = null;
+      let selectedTitle = false;
+      let linkDraft = null;
+      let interaction = null;
+      let clipboard = null;
+      let spaceDown = false;
+      let activeTextField = 'heading';
+      let dialogMode = 'export';
+      let toastTimer = null;
+      let undoStack = [];
+      let redoStack = [];
+      let pendingHistory = null;
+      let historyTimer = null;
+      let restoringHistory = false;
+
+      const viewport = $('#viewport');
+      const world = $('#world');
+      const tileLayer = $('#tileLayer');
+      const shapeLayer = $('#shapeLayer');
+      const textLayer = $('#textLayer');
+      const linkLayer = $('#linkLayer');
+      const titleWorld = $('#titleWorld');
+      const inspector = $('#inspector');
+
+      function showToast(message) {
+        const toast = $('#toast');
+        toast.textContent = message;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 1900);
+      }
+
+      function normalizeState(data) {
+        const result = {
+          version: 1,
+          title: String(data.title || 'Untitled hierarchy'),
+          titleVisible: data.titleVisible !== false,
+          titleX: Number.isFinite(Number(data.titleX)) ? Number(data.titleX) : -260,
+          titleY: Number.isFinite(Number(data.titleY)) ? Number(data.titleY) : -190,
+          titleText: {...titleTextDefaults, ...(data.titleText || {})},
+          bgColor: data.bgColor || '#f6f7fb',
+          defaultCenterId: data.defaultCenterId || null,
+          defaultZoom: clamp(Number(data.defaultZoom) || 1, .1, 3),
+          defaultCamera: data.defaultCamera || null,
+          tiles: Array.isArray(data.tiles) ? data.tiles : [],
+          shapes: Array.isArray(data.shapes) ? data.shapes : [],
+          textBoxes: Array.isArray(data.textBoxes) ? data.textBoxes : [],
+          links: Array.isArray(data.links) ? data.links : []
+        };
+        result.tiles = result.tiles.filter(tile=>!tile.__textBox).map(tile => ({
+          ...createTile(0, 0), ...tile,
+          text: {
+            heading: {...textDefaults.heading, ...(tile.text && tile.text.heading)},
+            subheading: {...textDefaults.subheading, ...(tile.text && tile.text.subheading)},
+            note: {...textDefaults.note, ...(tile.text && tile.text.note)}
+          }
+        }));
+        result.shapes = result.shapes.filter(shape=>shape.id!=='__title-bounds').map(shape => ({...createShape(0,0), ...shape}));
+        result.textBoxes = result.textBoxes.map(box=>({
+          ...createTextBox(0,0),...box,rotation:Number(box.rotation)||0,
+          style:{...textBoxTextDefaults,...(box.style||{})}
+        }));
+        result.links = result.links.map(link => ({
+          id: link.id || uid('link'), from: link.from, to: link.to, type: link.type || 'direct', flow: link.flow || 'auto',
+          axisLock: ['horizontal','vertical'].includes(link.axisLock) ? link.axisLock : null,
+          dashed: !!link.dashed, color: link.color || '#64748b', width: Number(link.width) || 2.5, bends: Array.isArray(link.bends) ? link.bends : []
+        }));
+        result.links.forEach(link=>{
+          const legacyJoin=link.bends.find(bend=>bend.join&&bend.join.linkId&&bend.join.linkId!==link.id);
+          const target=legacyJoin&&result.links.find(item=>item.id===legacyJoin.join.linkId);
+          if(target){
+            const targetTileIds=new Set([target.from,target.to].filter(endpoint=>endpoint&&endpoint.kind==='tile').map(endpoint=>endpoint.id));
+            let subordinate;
+            if(link.from&&link.from.kind==='tile'&&targetTileIds.has(link.from.id))subordinate=clone(link.to);
+            else if(link.to&&link.to.kind==='tile'&&targetTileIds.has(link.to.id))subordinate=clone(link.from);
+            else if(link.to&&link.to.kind==='tile')subordinate=clone(link.to);
+            else subordinate=clone(link.from||link.to);
+            link.from={kind:'link',id:target.id,t:clamp(Number(legacyJoin.join.t)||0,0,1)};link.to=subordinate;link.type='elbow';link.flow='auto';link.bends=[];
+          }
+          else link.bends.forEach(bend=>{if(bend.join)delete bend.join;});
+        });
+        return result;
+      }
+
+      function stateSnapshot() { return JSON.stringify(state); }
+
+      function updateUndoControl() {
+        const button=$('#undoAction');
+        const pendingChange=pendingHistory!==null&&stateSnapshot()!==pendingHistory;
+        if(button)button.disabled=!undoStack.length&&!pendingChange;
+      }
+
+      function beginHistory() {
+        if(restoringHistory||pendingHistory!==null)return;
+        pendingHistory=stateSnapshot();updateUndoControl();
+      }
+
+      function commitHistory() {
+        clearTimeout(historyTimer);historyTimer=null;
+        if(restoringHistory||pendingHistory===null)return;
+        const current=stateSnapshot();
+        if(current!==pendingHistory){undoStack.push(pendingHistory);if(undoStack.length>100)undoStack.shift();redoStack=[];}
+        pendingHistory=null;updateUndoControl();
+      }
+
+      function scheduleHistory(delay=0) {
+        updateUndoControl();clearTimeout(historyTimer);historyTimer=setTimeout(commitHistory,delay);
+      }
+
+      function restoreHistory(snapshot) {
+        restoringHistory=true;
+        state=normalizeState(JSON.parse(snapshot));
+        clearSelection();linkDraft=null;interaction=null;viewport.classList.remove('linking','panning');$('#modePill').textContent='Select mode';
+        renderAll();restoringHistory=false;updateUndoControl();
+      }
+
+      function undo() {
+        commitHistory();
+        if(!undoStack.length){showToast('Nothing to undo');return;}
+        const current=stateSnapshot(),snapshot=undoStack.pop();redoStack.push(current);restoreHistory(snapshot);showToast('Undone');
+      }
+
+      function redo() {
+        commitHistory();
+        if(!redoStack.length){showToast('Nothing to redo');return;}
+        const current=stateSnapshot(),snapshot=redoStack.pop();undoStack.push(current);restoreHistory(snapshot);showToast('Redone');
+      }
+
+      function fontStyle(style) {
+        return `font-family:${style.font};font-size:${style.size}px;font-weight:${style.bold ? 800 : 400};font-style:${style.italic ? 'italic' : 'normal'};color:${style.color};text-align:${style.align || 'left'}`;
+      }
+
+      function tilePort(tile, port) {
+        if (port === 'top') return {x:tile.x + tile.w / 2, y:tile.y};
+        if (port === 'bottom') return {x:tile.x + tile.w / 2, y:tile.y + tile.h};
+        if (port === 'left') return {x:tile.x, y:tile.y + tile.h / 2};
+        return {x:tile.x + tile.w, y:tile.y + tile.h / 2};
+      }
+
+      function endpointPoint(endpoint, stack = new Set()) {
+        if (!endpoint) return {x:0,y:0};
+        if (endpoint.kind === 'tile') {
+          const tile = state.tiles.find(item => item.id === endpoint.id);
+          return tile ? tilePort(tile, endpoint.port || 'right') : {x:0,y:0};
+        }
+        if (endpoint.kind === 'link') {
+          const parent = state.links.find(item => item.id === endpoint.id);
+          if (!parent || stack.has(parent.id)) return {x:0,y:0};
+          return pointOnLink(parent, clamp(Number(endpoint.t) || .5, 0, 1), new Set([...stack, parent.id]));
+        }
+        return {x:Number(endpoint.x)||0, y:Number(endpoint.y)||0};
+      }
+
+      function autoFlow(a, b) { return Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? 'horizontal' : 'vertical'; }
+
+      function defaultElbowPoints(a, b, flow) {
+        const direction = flow === 'auto' ? autoFlow(a,b) : flow;
+        if (direction === 'horizontal') {
+          const mid = (a.x + b.x) / 2;
+          return [{x:mid,y:a.y},{x:mid,y:b.y}];
+        }
+        const mid = (a.y + b.y) / 2;
+        return [{x:a.x,y:mid},{x:b.x,y:mid}];
+      }
+
+      function linkPoints(link, stack = new Set()) {
+        const a = endpointPoint(link.from, stack);
+        const b = endpointPoint(link.to, stack);
+        const needsAutomaticBends=link.type === 'elbow' || link.type === 'spline' || (link.axisLock && link.type === 'direct');
+        const bends = link.bends && link.bends.length ? link.bends : (needsAutomaticBends ? defaultElbowPoints(a,b,link.axisLock||link.flow) : []);
+        return [a, ...bends, b];
+      }
+
+      function linkPath(link, stack = new Set()) {
+        const points = linkPoints(link, stack);
+        const a = points[0], b = points[points.length - 1];
+        if (link.type === 'direct' && !link.axisLock) return `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+        if (link.type === 'curved') {
+          const routingFlow=link.axisLock||link.flow;
+          const flow = routingFlow === 'auto' ? autoFlow(a,b) : routingFlow;
+          if (flow === 'horizontal') {
+            const dx = (b.x-a.x) * .5;
+            return `M ${a.x} ${a.y} C ${a.x+dx} ${a.y}, ${b.x-dx} ${b.y}, ${b.x} ${b.y}`;
+          }
+          const dy = (b.y-a.y) * .5;
+          return `M ${a.x} ${a.y} C ${a.x} ${a.y+dy}, ${b.x} ${b.y-dy}, ${b.x} ${b.y}`;
+        }
+        if (link.type === 'spline') {
+          if (points.length < 3) return `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+          let path = `M ${a.x} ${a.y}`;
+          for (let index = 1; index < points.length - 1; index++) {
+            const current = points[index];
+            const next = points[index + 1];
+            path += ` Q ${current.x} ${current.y} ${(current.x + next.x)/2} ${(current.y + next.y)/2}`;
+          }
+          path += ` T ${b.x} ${b.y}`;
+          return path;
+        }
+        return 'M ' + points.map(point => `${point.x} ${point.y}`).join(' L ');
+      }
+
+      function cubicPoint(a, c1, c2, b, t) {
+        const u = 1-t;
+        return {x:u*u*u*a.x+3*u*u*t*c1.x+3*u*t*t*c2.x+t*t*t*b.x, y:u*u*u*a.y+3*u*u*t*c1.y+3*u*t*t*c2.y+t*t*t*b.y};
+      }
+
+      function pointOnLink(link, t, stack = new Set()) {
+        const points = linkPoints(link, stack);
+        const a = points[0], b = points[points.length-1];
+        if (link.type === 'curved') {
+          const routingFlow=link.axisLock||link.flow;
+          const flow = routingFlow === 'auto' ? autoFlow(a,b) : routingFlow;
+          const c1 = flow === 'horizontal' ? {x:a.x+(b.x-a.x)*.5,y:a.y} : {x:a.x,y:a.y+(b.y-a.y)*.5};
+          const c2 = flow === 'horizontal' ? {x:b.x-(b.x-a.x)*.5,y:b.y} : {x:b.x,y:b.y-(b.y-a.y)*.5};
+          return cubicPoint(a,c1,c2,b,t);
+        }
+        const samples = link.type === 'spline' ? 100 : Math.max(1, points.length-1);
+        if (link.type === 'spline') {
+          const path = $('#path-' + CSS.escape(link.id));
+          if (path && path.getTotalLength) {
+            const length = path.getTotalLength();
+            const point = path.getPointAtLength(length*t);
+            return {x:point.x,y:point.y};
+          }
+        }
+        const lengths = [];
+        let total = 0;
+        for (let i=0;i<points.length-1;i++) { const length = Math.hypot(points[i+1].x-points[i].x, points[i+1].y-points[i].y); lengths.push(length); total += length; }
+        let target = total*t;
+        for (let i=0;i<lengths.length;i++) {
+          if (target <= lengths[i] || i === lengths.length-1) {
+            const ratio = lengths[i] ? target/lengths[i] : 0;
+            return {x:points[i].x+(points[i+1].x-points[i].x)*ratio, y:points[i].y+(points[i+1].y-points[i].y)*ratio};
+          }
+          target -= lengths[i];
+        }
+        return b;
+      }
+
+      function nearestPointOnLink(link, worldPoint) {
+        let best = {t:.5, point:pointOnLink(link,.5), distance:Infinity};
+        for (let i=0;i<=100;i++) {
+          const t=i/100, point=pointOnLink(link,t);
+          const distance=Math.hypot(point.x-worldPoint.x,point.y-worldPoint.y);
+          if (distance<best.distance) best={t,point,distance};
+        }
+        return best;
+      }
+
+      function nearestTOnLink(link, worldPoint) {
+        return nearestPointOnLink(link,worldPoint).t;
+      }
+
+      function linkDependsOn(startId, targetId, seen=new Set()) {
+        if(startId===targetId)return true;
+        if(seen.has(startId))return false;
+        seen.add(startId);
+        const link=state.links.find(item=>item.id===startId);
+        if(!link)return false;
+        const references=[link.from,link.to].filter(endpoint=>endpoint&&endpoint.kind==='link').map(endpoint=>endpoint.id);
+        return references.some(id=>id===targetId||linkDependsOn(id,targetId,seen));
+      }
+
+      function findBranchSnap(draggedLink, worldPoint) {
+        let best=null;
+        state.links.forEach(target=>{
+          if(target.id===draggedLink.id||linkDependsOn(target.id,draggedLink.id))return;
+          const candidate=nearestPointOnLink(target,worldPoint);
+          if(candidate.distance*camera.zoom<=18&&(!best||candidate.distance<best.distance))best={targetLinkId:target.id,t:candidate.t,point:candidate.point,distance:candidate.distance};
+        });
+        return best;
+      }
+
+      function linkDirectionAt(link,t) {
+        const before=pointOnLink(link,clamp(t-.02,0,1)),after=pointOnLink(link,clamp(t+.02,0,1));
+        return Math.abs(after.x-before.x)>=Math.abs(after.y-before.y)?'horizontal':'vertical';
+      }
+
+      function subordinateEndpointForMerge(draggedLink,targetLink) {
+        const targetTileIds=new Set([targetLink.from,targetLink.to].filter(endpoint=>endpoint&&endpoint.kind==='tile').map(endpoint=>endpoint.id));
+        if(draggedLink.from&&draggedLink.from.kind==='tile'&&targetTileIds.has(draggedLink.from.id))return clone(draggedLink.to);
+        if(draggedLink.to&&draggedLink.to.kind==='tile'&&targetTileIds.has(draggedLink.to.id))return clone(draggedLink.from);
+        if(draggedLink.to&&draggedLink.to.kind==='tile')return clone(draggedLink.to);
+        if(draggedLink.from&&draggedLink.from.kind==='tile')return clone(draggedLink.from);
+        return clone(draggedLink.to||draggedLink.from);
+      }
+
+      function rotatedBoxBounds(box) {
+        const radians=(Number(box.rotation)||0)*Math.PI/180,cos=Math.abs(Math.cos(radians)),sin=Math.abs(Math.sin(radians));
+        const w=box.w*cos+box.h*sin,h=box.w*sin+box.h*cos,cx=box.x+box.w/2,cy=box.y+box.h/2;
+        return {x:cx-w/2,y:cy-h/2,w,h};
+      }
+
+      function getContentBounds(includeMargin = false) {
+        const items = [
+          ...state.tiles.map(item => ({x:item.x,y:item.y,w:item.w,h:item.h})),
+          ...state.shapes.map(item => ({x:item.x,y:item.y,w:item.w,h:item.h})),
+          ...state.textBoxes.map(rotatedBoxBounds)
+        ];
+        state.links.forEach(link => linkPoints(link).forEach(point => items.push({x:point.x,y:point.y,w:1,h:1})));
+        if (state.titleVisible && state.title) items.push({x:state.titleX,y:state.titleY,w:520,h:Math.max(48,state.titleText.size*1.35)});
+        if (!items.length) return {x:-300,y:-220,w:600,h:440};
+        const minX=Math.min(...items.map(item=>item.x)); const minY=Math.min(...items.map(item=>item.y));
+        const maxX=Math.max(...items.map(item=>item.x+item.w)); const maxY=Math.max(...items.map(item=>item.y+item.h));
+        const margin=includeMargin?80:0;
+        return {x:minX-margin,y:minY-margin,w:maxX-minX+margin*2,h:maxY-minY+margin*2};
+      }
+
+      function clientToWorld(clientX, clientY) {
+        const rect=viewport.getBoundingClientRect();
+        return {x:(clientX-rect.left-camera.x)/camera.zoom,y:(clientY-rect.top-camera.y)/camera.zoom};
+      }
+
+      function worldToScreen(point) { return {x:point.x*camera.zoom+camera.x,y:point.y*camera.zoom+camera.y}; }
+
+      function updateCamera() {
+        camera.zoom=clamp(camera.zoom,.1,3);
+        world.style.transform=`translate(${camera.x}px,${camera.y}px) scale(${camera.zoom})`;
+        const grid=32*camera.zoom;
+        viewport.style.backgroundSize=`${grid}px ${grid}px`;
+        viewport.style.backgroundPosition=`${camera.x % grid}px ${camera.y % grid}px`;
+        $('#zoomLabel').textContent=Math.round(camera.zoom*100)+'%';
+        updateEdgeArrows();
+      }
+
+      function centerOn(point, zoom = camera.zoom) {
+        const rect=viewport.getBoundingClientRect();
+        camera.zoom=clamp(zoom,.1,3);
+        camera.x=rect.width/2-point.x*camera.zoom;
+        camera.y=rect.height/2-point.y*camera.zoom;
+        updateCamera();
+      }
+
+      function fitView() {
+        const bounds=getContentBounds(true), rect=viewport.getBoundingClientRect();
+        const zoom=clamp(Math.min(rect.width/bounds.w,rect.height/bounds.h),.1,1.5);
+        centerOn({x:bounds.x+bounds.w/2,y:bounds.y+bounds.h/2},zoom);
+      }
+
+      function homeView() {
+        const tile=state.tiles.find(item=>item.id===state.defaultCenterId);
+        if (tile) centerOn({x:tile.x+tile.w/2,y:tile.y+tile.h/2},state.defaultZoom);
+        else if (state.defaultCamera && Number.isFinite(state.defaultCamera.centerX)) centerOn({x:state.defaultCamera.centerX,y:state.defaultCamera.centerY},state.defaultCamera.zoom || state.defaultZoom);
+        else if (state.defaultCamera) { camera=clone(state.defaultCamera); updateCamera(); }
+        else fitView();
+      }
+
+      function updateEdgeArrows() {
+        if (!viewport.clientWidth) return;
+        const bounds=getContentBounds(false);
+        const topLeft=worldToScreen({x:bounds.x,y:bounds.y});
+        const bottomRight=worldToScreen({x:bounds.x+bounds.w,y:bounds.y+bounds.h});
+        const hidden={left:topLeft.x<0, right:bottomRight.x>viewport.clientWidth, top:topLeft.y<0, bottom:bottomRight.y>viewport.clientHeight};
+        $$('.edge-arrow').forEach(arrow=>arrow.classList.toggle('show',hidden[arrow.dataset.direction]));
+      }
+
+      function connectorHtml(tileId, port) {
+        const start=linkDraft && linkDraft.kind==='tile' && linkDraft.id===tileId && linkDraft.port===port;
+        return `<button class="connector${start?' starting':''}" data-tile="${tileId}" data-port="${port}" aria-label="Connect from ${port}">+</button>`;
+      }
+
+      function renderTiles() {
+        const showAll=!!linkDraft || viewport.classList.contains('linking');
+        tileLayer.innerHTML=state.tiles.map(tile=>{
+          const selected=selectedTiles.has(tile.id);
+          const editable=selected && selectedTiles.size===1;
+          const showConnectors=showAll || (selected && selectedTiles.size===1);
+          const editAttrs=field=>editable?` contenteditable="true" tabindex="0" spellcheck="true" role="textbox" data-edit-tile="${tile.id}" data-edit-field="${field}" aria-label="Edit ${field}"`:'';
+          return `<div class="tile${selected?' selected':''}" data-id="${tile.id}" style="left:${tile.x}px;top:${tile.y}px;width:${tile.w}px;height:${tile.h}px;padding:${tile.padding}px;background:${tile.bg};border:${tile.borderWidth}px solid ${tile.borderColor};border-radius:${tile.radius}px">
+            <div class="tile-content">
+              <div class="tile-heading tile-edit-field" style="${fontStyle(tile.text.heading)}"${editAttrs('heading')}>${escapeHtml(tile.heading)}</div>
+              <div class="tile-subheading tile-edit-field" style="${fontStyle(tile.text.subheading)}"${editAttrs('subheading')}>${escapeHtml(tile.subheading)}</div>
+              <div class="tile-note tile-edit-field" style="${fontStyle(tile.text.note)}"${editAttrs('note')}>${escapeHtml(tile.note)}</div>
+            </div>
+            ${selected && selectedTiles.size===1 ? '<span class="resize-handle" data-resize-tile="'+tile.id+'"></span>' : ''}
+            ${showConnectors ? ['top','right','bottom','left'].map(port=>connectorHtml(tile.id,port)).join('') : ''}
+          </div>`;
+        }).join('');
+      }
+
+      function renderTextBoxes() {
+        textLayer.innerHTML=state.textBoxes.map(box=>{
+          const selected=selectedTextBoxId===box.id;
+          return `<div class="text-box${selected?' selected':''}" data-id="${box.id}" style="left:${box.x}px;top:${box.y}px;width:${box.w}px;height:${box.h}px;transform:rotate(${box.rotation}deg)">
+            <div class="text-box-content" style="${fontStyle(box.style)}"${selected?' contenteditable="true" tabindex="0" spellcheck="true" role="textbox" aria-label="Edit text box"':''}>${escapeHtml(box.text)}</div>
+            ${selected?'<span class="resize-handle" data-resize-text="'+box.id+'"></span>':''}
+          </div>`;
+        }).join('');
+      }
+
+      function renderShapes() {
+        shapeLayer.innerHTML=state.shapes.map(shape=>{
+          const radius=shape.type==='circle'?'50%':(shape.type==='square'?Math.min(shape.radius,30):shape.radius+'px');
+          return `<div class="shape${shape.locked?' locked':''}${selectedShapeId===shape.id?' selected':''}" data-id="${shape.id}" style="left:${shape.x}px;top:${shape.y}px;width:${shape.w}px;height:${shape.h}px;background:${shape.bg};opacity:${shape.opacity};border:${shape.borderWidth}px solid ${shape.borderColor};border-radius:${radius}">
+            ${shape.locked?'<span class="shape-lock">●</span>':''}
+            ${selectedShapeId===shape.id && !shape.locked?['nw','ne','se','sw'].map(corner=>'<span class="shape-resize-handle '+corner+'" data-resize-shape="'+shape.id+'" data-corner="'+corner+'"></span>').join(''):''}
+          </div>`;
+        }).join('');
+      }
+
+      function renderLinks() {
+        state.links.forEach(refreshLockedLink);
+        const content=[];
+        const snap=interaction&&interaction.type==='dragLine'?interaction.snapCandidate:null;
+        state.links.forEach(link=>{
+          const selected=selectedLinkId===link.id;
+          const path=linkPath(link,new Set([link.id]));
+          const dash=link.dashed?' stroke-dasharray="10 8"':'';
+          content.push(`<path id="path-${link.id}" class="link-visible${selected?' link-selected':''}${snap&&snap.targetLinkId===link.id?' link-snap-target':''}" d="${path}" stroke="${link.color}" stroke-width="${link.width}"${dash} />`);
+          content.push(`<path class="link-hit" data-link="${link.id}" d="${path}" />`);
+          [['from',link.from],['to',link.to]].forEach(([key,endpoint])=>{ if(endpoint && endpoint.kind==='link'){ const p=endpointPoint(endpoint); content.push(`<circle class="link-anchor-dot${selected?' draggable':''}" data-child-link="${link.id}" data-endpoint="${key}" cx="${p.x}" cy="${p.y}" r="${selected?7:5}" />`); } });
+          if(selected && link.bends) link.bends.forEach((bend,index)=>content.push(`<circle class="bend-handle" data-link="${link.id}" data-bend="${index}" cx="${bend.x}" cy="${bend.y}" r="7" />`));
+        });
+        if(snap)content.push(`<circle class="branch-snap-preview" cx="${snap.point.x}" cy="${snap.point.y}" r="10" />`);
+        linkLayer.innerHTML=content.join('');
+      }
+
+      function renderTitle() {
+        titleWorld.textContent=state.title;
+        titleWorld.style.left=state.titleX+'px';
+        titleWorld.style.top=state.titleY+'px';
+        titleWorld.style.fontFamily=state.titleText.font;
+        titleWorld.style.fontSize=state.titleText.size+'px';
+        titleWorld.style.fontWeight=state.titleText.bold?'800':'400';
+        titleWorld.style.fontStyle=state.titleText.italic?'italic':'normal';
+        titleWorld.style.color=state.titleText.color;
+        titleWorld.style.textAlign=state.titleText.align||'left';
+        titleWorld.classList.toggle('hidden',!state.titleVisible);
+        titleWorld.classList.toggle('selected',selectedTitle&&state.titleVisible);
+      }
+
+      function renderAll(skipInspector=false) {
+        viewport.style.backgroundColor=state.bgColor;
+        renderShapes(); renderLinks(); renderTitle(); renderTiles(); renderTextBoxes();
+        $('#emptyHint').classList.toggle('hidden',state.tiles.length+state.shapes.length+state.textBoxes.length>0);
+        $('#projectTitle').value=state.title;
+        $('#showTitle').checked=state.titleVisible;
+        $('#backgroundColor').value=state.bgColor;
+        $('#defaultZoom').value=Math.round(state.defaultZoom*100);
+        $('#topAddLink').classList.toggle('active',viewport.classList.contains('linking'));
+        $('#addLink').classList.toggle('active',viewport.classList.contains('linking'));
+        if(!skipInspector) renderInspector();
+        updateCamera();
+      }
+
+      function bindField(selector, eventName, handler) {
+        const element=$(selector,inspector);
+        if(element) element.addEventListener(eventName,handler);
+      }
+
+      function applyToSelectedTiles(updater, skipInspector=false) {
+        state.tiles.forEach(tile=>{ if(selectedTiles.has(tile.id)) updater(tile); });
+        renderAll(skipInspector);
+      }
+
+      function applyTilePositions(positions) {
+        const deltas=new Map();
+        positions.forEach((position,id)=>{
+          const tile=state.tiles.find(item=>item.id===id);
+          if(!tile)return;
+          const nextX=Number.isFinite(position.x)?position.x:tile.x,nextY=Number.isFinite(position.y)?position.y:tile.y;
+          const dx=nextX-tile.x,dy=nextY-tile.y;
+          if(Math.abs(dx)>.001||Math.abs(dy)>.001)deltas.set(id,{dx,dy});
+          tile.x=nextX;tile.y=nextY;
+        });
+        state.links.forEach(link=>{
+          if(!link.bends||!link.bends.length)return;
+          const fromDelta=link.from&&link.from.kind==='tile'&&deltas.get(link.from.id)||{dx:0,dy:0};
+          const toDelta=link.to&&link.to.kind==='tile'&&deltas.get(link.to.id)||{dx:0,dy:0};
+          if(!fromDelta.dx&&!fromDelta.dy&&!toDelta.dx&&!toDelta.dy)return;
+          link.bends=link.bends.map((bend,index)=>{
+            const t=(index+1)/(link.bends.length+1);
+            return {...bend,x:bend.x+fromDelta.dx*(1-t)+toDelta.dx*t,y:bend.y+fromDelta.dy*(1-t)+toDelta.dy*t};
+          });
+        });
+        renderAll();
+      }
+
+      function renderAlignmentGuides(guides=[]) {
+        const layer=$('#alignmentGuides');
+        layer.innerHTML=guides.map(guide=>{
+          const start=worldToScreen({x:guide.x1,y:guide.y1}),end=worldToScreen({x:guide.x2,y:guide.y2});
+          if(guide.axis==='x')return `<span class="alignment-guide vertical" style="left:${start.x}px;top:${Math.min(start.y,end.y)}px;height:${Math.abs(end.y-start.y)}px"></span>`;
+          return `<span class="alignment-guide horizontal" style="left:${Math.min(start.x,end.x)}px;top:${start.y}px;width:${Math.abs(end.x-start.x)}px"></span>`;
+        }).join('');
+      }
+
+      function tileAlignmentSnap(starts,rawDx,rawDy) {
+        const movingTiles=starts.map(start=>{
+          const tile=state.tiles.find(item=>item.id===start.id);
+          return tile&&{x:start.x+rawDx,y:start.y+rawDy,w:tile.w,h:tile.h};
+        }).filter(Boolean);
+        if(!movingTiles.length)return {dx:rawDx,dy:rawDy,guides:[]};
+        const left=Math.min(...movingTiles.map(tile=>tile.x)),top=Math.min(...movingTiles.map(tile=>tile.y));
+        const right=Math.max(...movingTiles.map(tile=>tile.x+tile.w)),bottom=Math.max(...movingTiles.map(tile=>tile.y+tile.h));
+        const bounds={x:left,y:top,w:right-left,h:bottom-top};
+        const threshold=8/camera.zoom,nearbyLimit=650/camera.zoom;
+        const movingX=[bounds.x+bounds.w/2,bounds.x,bounds.x+bounds.w],movingY=[bounds.y+bounds.h/2,bounds.y,bounds.y+bounds.h];
+        let bestX=null,bestY=null;
+        state.tiles.forEach(target=>{
+          if(selectedTiles.has(target.id))return;
+          const gapX=Math.max(0,target.x-(bounds.x+bounds.w),bounds.x-(target.x+target.w));
+          const gapY=Math.max(0,target.y-(bounds.y+bounds.h),bounds.y-(target.y+target.h));
+          if(Math.hypot(gapX,gapY)>nearbyLimit)return;
+          const targetX=[target.x+target.w/2,target.x,target.x+target.w],targetY=[target.y+target.h/2,target.y,target.y+target.h];
+          movingX.forEach((value,index)=>{const delta=targetX[index]-value,distance=Math.abs(delta);if(distance<=threshold&&(!bestX||distance<bestX.distance))bestX={delta,distance,coordinate:targetX[index],target};});
+          movingY.forEach((value,index)=>{const delta=targetY[index]-value,distance=Math.abs(delta);if(distance<=threshold&&(!bestY||distance<bestY.distance))bestY={delta,distance,coordinate:targetY[index],target};});
+        });
+        const dx=rawDx+(bestX?bestX.delta:0),dy=rawDy+(bestY?bestY.delta:0),guides=[];
+        const snappedBounds={...bounds,x:bounds.x+(bestX?bestX.delta:0),y:bounds.y+(bestY?bestY.delta:0)};
+        if(bestX)guides.push({axis:'x',x1:bestX.coordinate,x2:bestX.coordinate,y1:Math.min(snappedBounds.y,bestX.target.y)-20/camera.zoom,y2:Math.max(snappedBounds.y+snappedBounds.h,bestX.target.y+bestX.target.h)+20/camera.zoom});
+        if(bestY)guides.push({axis:'y',y1:bestY.coordinate,y2:bestY.coordinate,x1:Math.min(snappedBounds.x,bestY.target.x)-20/camera.zoom,x2:Math.max(snappedBounds.x+snappedBounds.w,bestY.target.x+bestY.target.w)+20/camera.zoom});
+        return {dx,dy,guides};
+      }
+
+      function alignSelectedTiles(axis) {
+        const tiles=state.tiles.filter(tile=>selectedTiles.has(tile.id));
+        if(tiles.length<2)return;
+        const vertical=axis==='vertical';
+        const centre=tiles.reduce((sum,tile)=>sum+(vertical?tile.x+tile.w/2:tile.y+tile.h/2),0)/tiles.length;
+        const positions=new Map(tiles.map(tile=>[tile.id,vertical?{x:centre-tile.w/2,y:tile.y}:{x:tile.x,y:centre-tile.h/2}]));
+        applyTilePositions(positions);
+        showToast(vertical?'Vertical centres aligned':'Horizontal centres aligned');
+      }
+
+      function spaceSelectedTiles(axis) {
+        const tiles=state.tiles.filter(tile=>selectedTiles.has(tile.id));
+        if(tiles.length<3){showToast('Select at least three tiles');return;}
+        const horizontal=axis==='horizontal',positionKey=horizontal?'x':'y',sizeKey=horizontal?'w':'h';
+        const sorted=tiles.slice().sort((a,b)=>a[positionKey]-b[positionKey]);
+        const gaps=[];
+        for(let index=1;index<sorted.length;index++)gaps.push(sorted[index][positionKey]-(sorted[index-1][positionKey]+sorted[index-1][sizeKey]));
+        const averageGap=gaps.reduce((sum,gap)=>sum+gap,0)/gaps.length;
+        const positions=new Map();let cursor=sorted[0][positionKey];
+        sorted.forEach((tile,index)=>{
+          if(index)cursor+=sorted[index-1][sizeKey]+averageGap;
+          positions.set(tile.id,horizontal?{x:cursor,y:tile.y}:{x:tile.x,y:cursor});
+        });
+        applyTilePositions(positions);
+        showToast(`${horizontal?'Horizontal':'Vertical'} gaps set to ${Math.round(averageGap)}px`);
+      }
+
+      function fontOptions(current) {
+        const list=fonts.includes(current)?fonts:[current,...fonts];
+        return list.map(font=>`<option value="${escAttr(font)}"${font===current?' selected':''}>${escapeHtml(font)}</option>`).join('');
+      }
+
+      function renderTileInspector() {
+        const tiles=state.tiles.filter(tile=>selectedTiles.has(tile.id));
+        const tile=tiles[0], multiple=tiles.length>1;
+        const style=tile.text[activeTextField];
+        inspector.innerHTML=`
+          <h2>Tile ${multiple?'<span class="selection-chip">'+tiles.length+' selected</span>':''}</h2>
+          ${!multiple?'<p>Edit here or type directly inside the selected tile. Tab and Shift-Tab move between its three text fields.</p>':''}
+          ${!multiple?`<div class="field"><label>Main heading</label><textarea id="tileHeading">${escapeHtml(tile.heading)}</textarea></div>
+          <div class="field"><label>Subheading</label><textarea id="tileSubheading">${escapeHtml(tile.subheading)}</textarea></div>
+          <div class="field"><label>Note</label><textarea id="tileNote">${escapeHtml(tile.note)}</textarea></div>`:'<p>Formatting and size changes apply to every selected tile.</p>'}
+          <h2>Text style</h2>
+          <div class="field"><label>Format field</label><select id="textField"><option value="heading"${activeTextField==='heading'?' selected':''}>Main heading</option><option value="subheading"${activeTextField==='subheading'?' selected':''}>Subheading</option><option value="note"${activeTextField==='note'?' selected':''}>Note</option></select></div>
+          <div class="field"><label>Web font</label><select id="textFont">${fontOptions(style.font)}</select></div>
+          <div class="field"><label>Alignment</label><select id="textAlign"><option value="left"${style.align==='left'?' selected':''}>Left</option><option value="center"${style.align==='center'?' selected':''}>Centre</option><option value="right"${style.align==='right'?' selected':''}>Right</option></select></div>
+          <div class="field-row three">
+            <div class="field"><label>Size</label><input id="textSize" type="number" min="8" max="96" value="${style.size}" /></div>
+            <div class="field"><label>Colour</label><input id="textColor" type="color" value="${style.color}" /></div>
+            <div class="button-row" style="margin:0"><button id="textBold" class="format-toggle${style.bold?' active':''}">B</button><button id="textItalic" class="format-toggle italic${style.italic?' active':''}">I</button></div>
+          </div>
+          <h2>Tile style</h2>
+          <div class="field-row"><div class="field"><label>Width</label><input id="tileWidth" type="number" min="90" max="1200" value="${Math.round(tile.w)}" /></div><div class="field"><label>Height</label><input id="tileHeight" type="number" min="60" max="800" value="${Math.round(tile.h)}" /></div></div>
+          <div class="field-row"><div class="field"><label>Background</label><input id="tileBg" type="color" value="${tile.bg}" /></div><div class="field"><label>Corner radius</label><input id="tileRadius" type="number" min="0" max="200" value="${tile.radius}" /></div></div>
+          <div class="field-row"><div class="field"><label>Border colour</label><input id="tileBorder" type="color" value="${tile.borderColor}" /></div><div class="field"><label>Border width</label><input id="tileBorderWidth" type="number" min="0" max="20" step="1" value="${tile.borderWidth}" /></div></div>
+          ${multiple?`<h2>Arrange selection</h2>
+          <p>Align the tile centres to a shared axis, or make their current edge-to-edge gaps equal.</p>
+          <div class="button-row"><button id="alignTilesVertical" title="Place every tile centre on one vertical line">Align vertically</button><button id="alignTilesHorizontal" title="Place every tile centre on one horizontal line">Align horizontally</button></div>
+          <div class="button-row"><button id="spaceTilesHorizontal"${tiles.length<3?' disabled':''}>Space horizontally</button><button id="spaceTilesVertical"${tiles.length<3?' disabled':''}>Space vertically</button></div>`:''}
+          <h2>Actions</h2>
+          <div class="button-row"><button id="duplicateTile">Duplicate</button><button id="defaultTile">Set as centre</button></div>
+          <button id="deleteTile" class="danger" style="width:100%">Delete tile${multiple?'s':''}</button>`;
+        if(!multiple){
+          bindField('#tileHeading','input',event=>{tile.heading=event.target.value;renderTiles();});
+          bindField('#tileSubheading','input',event=>{tile.subheading=event.target.value;renderTiles();});
+          bindField('#tileNote','input',event=>{tile.note=event.target.value;renderTiles();});
+        }
+        bindField('#textField','change',event=>{activeTextField=event.target.value;renderInspector();});
+        bindField('#textFont','change',event=>applyToSelectedTiles(item=>item.text[activeTextField].font=event.target.value));
+        bindField('#textAlign','change',event=>applyToSelectedTiles(item=>item.text[activeTextField].align=event.target.value));
+        bindField('#textSize','change',event=>applyToSelectedTiles(item=>item.text[activeTextField].size=clamp(Number(event.target.value)||12,8,96)));
+        bindField('#textColor','input',event=>applyToSelectedTiles(item=>item.text[activeTextField].color=event.target.value,true));
+        bindField('#textBold','click',()=>{const value=!tile.text[activeTextField].bold;applyToSelectedTiles(item=>item.text[activeTextField].bold=value);});
+        bindField('#textItalic','click',()=>{const value=!tile.text[activeTextField].italic;applyToSelectedTiles(item=>item.text[activeTextField].italic=value);});
+        bindField('#tileWidth','change',event=>applyToSelectedTiles(item=>item.w=clamp(Number(event.target.value)||230,90,1200)));
+        bindField('#tileHeight','change',event=>applyToSelectedTiles(item=>item.h=clamp(Number(event.target.value)||132,60,800)));
+        bindField('#tileBg','input',event=>applyToSelectedTiles(item=>item.bg=event.target.value,true));
+        bindField('#tileRadius','change',event=>applyToSelectedTiles(item=>item.radius=clamp(Number(event.target.value)||0,0,200)));
+        bindField('#tileBorder','input',event=>applyToSelectedTiles(item=>item.borderColor=event.target.value,true));
+        bindField('#tileBorderWidth','change',event=>applyToSelectedTiles(item=>item.borderWidth=clamp(Number(event.target.value)||0,0,20)));
+        bindField('#alignTilesVertical','click',()=>alignSelectedTiles('vertical'));
+        bindField('#alignTilesHorizontal','click',()=>alignSelectedTiles('horizontal'));
+        bindField('#spaceTilesHorizontal','click',()=>spaceSelectedTiles('horizontal'));
+        bindField('#spaceTilesVertical','click',()=>spaceSelectedTiles('vertical'));
+        bindField('#duplicateTile','click',()=>duplicateSelection());
+        bindField('#defaultTile','click',()=>{state.defaultCenterId=tile.id;state.defaultZoom=camera.zoom;showToast('Default centre and zoom saved');renderAll();});
+        bindField('#deleteTile','click',deleteSelection);
+      }
+
+      function renderShapeInspector() {
+        const shape=state.shapes.find(item=>item.id===selectedShapeId);
+        if(!shape) return renderInspector();
+        inspector.innerHTML=`<h2>Shape</h2>
+          <div class="field"><label>Shape type</label><select id="shapeType"><option value="rectangle"${shape.type==='rectangle'?' selected':''}>Rectangle</option><option value="square"${shape.type==='square'?' selected':''}>Square</option><option value="circle"${shape.type==='circle'?' selected':''}>Circle</option></select></div>
+          <div class="field-row"><div class="field"><label>Width</label><input id="shapeWidth" type="number" min="30" max="3000" value="${Math.round(shape.w)}" /></div><div class="field"><label>Height</label><input id="shapeHeight" type="number" min="30" max="3000" value="${Math.round(shape.h)}" /></div></div>
+          <div class="field-row"><div class="field"><label>Fill</label><input id="shapeBg" type="color" value="${shape.bg}" /></div><div class="field"><label>Opacity</label><input id="shapeOpacity" type="number" min="5" max="100" value="${Math.round(shape.opacity*100)}" /></div></div>
+          <div class="field-row"><div class="field"><label>Border colour</label><input id="shapeBorder" type="color" value="${shape.borderColor}" /></div><div class="field"><label>Border width</label><input id="shapeBorderWidth" type="number" min="0" max="20" value="${shape.borderWidth}" /></div></div>
+          <div class="field"><label>Corner radius</label><input id="shapeRadius" type="number" min="0" max="300" value="${shape.radius}" /></div>
+          <h2>Actions</h2>
+          <div class="button-row"><button id="duplicateShape">Duplicate</button><button id="lockShape" class="${shape.locked?'active':''}">${shape.locked?'Unlock':'Lock'} shape</button></div>
+          <button id="deleteShape" class="danger" style="width:100%">Delete shape</button>`;
+        const update=(key,value,skipInspector=false)=>{shape[key]=value;renderAll(skipInspector);};
+        bindField('#shapeType','change',event=>{shape.type=event.target.value;if(shape.type!=='rectangle')shape.h=shape.w;renderAll();});
+        bindField('#shapeWidth','change',event=>{const value=clamp(Number(event.target.value)||100,30,3000);shape.w=value;if(shape.type!=='rectangle')shape.h=value;renderAll();});
+        bindField('#shapeHeight','change',event=>{const value=clamp(Number(event.target.value)||100,30,3000);shape.h=value;if(shape.type!=='rectangle')shape.w=value;renderAll();});
+        bindField('#shapeBg','input',event=>update('bg',event.target.value,true));
+        bindField('#shapeOpacity','change',event=>update('opacity',clamp(Number(event.target.value)||100,5,100)/100));
+        bindField('#shapeBorder','input',event=>update('borderColor',event.target.value,true));
+        bindField('#shapeBorderWidth','change',event=>update('borderWidth',clamp(Number(event.target.value)||0,0,20)));
+        bindField('#shapeRadius','change',event=>update('radius',clamp(Number(event.target.value)||0,0,300)));
+        bindField('#duplicateShape','click',duplicateSelection);
+        bindField('#lockShape','click',()=>update('locked',!shape.locked));
+        bindField('#deleteShape','click',deleteSelection);
+      }
+
+      function addBend(link) {
+        if(link.axisLock){showToast('Unlock the line orientation before adding bends');return;}
+        const a=endpointPoint(link.from), b=endpointPoint(link.to);
+        if(link.type==='direct') link.type='elbow';
+        else if(link.type==='curved') link.type='spline';
+        if(!link.bends.length) link.bends=defaultElbowPoints(a,b,link.flow);
+        else {
+          const index=Math.floor(link.bends.length/2);
+          const left=index===0?a:link.bends[index-1], right=link.bends[index]||b;
+          link.bends.splice(index,0,{x:(left.x+right.x)/2+24,y:(left.y+right.y)/2+24});
+        }
+        renderAll();
+      }
+
+      function subordinateTileForLink(link) {
+        if(link.to&&link.to.kind==='tile'){
+          if(link.from&&link.from.kind==='tile'&&link.from.id===link.to.id)return null;
+          const tile=state.tiles.find(item=>item.id===link.to.id);
+          return tile?{tile,childKey:'to',anchorKey:'from'}:null;
+        }
+        if(link.from&&link.from.kind==='tile'&&link.to&&link.to.kind==='link'){
+          const tile=state.tiles.find(item=>item.id===link.from.id);
+          return tile?{tile,childKey:'from',anchorKey:'to'}:null;
+        }
+        return null;
+      }
+
+      function refreshLockedLink(link) {
+        if(!link.axisLock)return;
+        link.flow=link.axisLock;link.bends=[];
+        const target=subordinateTileForLink(link);
+        if(!target)return;
+        const child=target.tile,childEndpoint=link[target.childKey],anchorEndpoint=link[target.anchorKey];
+        const superior=anchorEndpoint&&anchorEndpoint.kind==='tile'?state.tiles.find(item=>item.id===anchorEndpoint.id):null;
+        const reference=superior?{x:superior.x+superior.w/2,y:superior.y+superior.h/2}:endpointPoint(anchorEndpoint);
+        const centre={x:child.x+child.w/2,y:child.y+child.h/2};
+        if(link.axisLock==='vertical'){
+          const side=Math.abs(centre.y-reference.y)>1?Math.sign(centre.y-reference.y):(childEndpoint.port==='bottom'?-1:1);
+          childEndpoint.port=side>0?'top':'bottom';
+          if(anchorEndpoint&&anchorEndpoint.kind==='tile')anchorEndpoint.port=side>0?'bottom':'top';
+        } else {
+          const side=Math.abs(centre.x-reference.x)>1?Math.sign(centre.x-reference.x):(childEndpoint.port==='right'?-1:1);
+          childEndpoint.port=side>0?'left':'right';
+          if(anchorEndpoint&&anchorEndpoint.kind==='tile')anchorEndpoint.port=side>0?'right':'left';
+        }
+      }
+
+      function orientLink(link,orientation) {
+        if(link.axisLock===orientation){
+          link.axisLock=null;renderAll();showToast(`${orientation[0].toUpperCase()+orientation.slice(1)} line lock released`);return;
+        }
+        const target=subordinateTileForLink(link);
+        if(!target){showToast('This line has no subordinate tile to move');return;}
+        const child=target.tile,childEndpoint=link[target.childKey],anchorEndpoint=link[target.anchorKey];
+        const superior=anchorEndpoint&&anchorEndpoint.kind==='tile'?state.tiles.find(item=>item.id===anchorEndpoint.id):null;
+        const reference=superior?{x:superior.x+superior.w/2,y:superior.y+superior.h/2}:endpointPoint(anchorEndpoint);
+        const childCentre={x:child.x+child.w/2,y:child.y+child.h/2};
+        let nextX=child.x,nextY=child.y;
+        if(orientation==='vertical'){
+          const offset=childCentre.y-reference.y,side=Math.abs(offset)>1?Math.sign(offset):1;
+          const fallback=Math.abs(childCentre.x-reference.x),minimum=(superior?superior.h/2:0)+child.h/2+48;
+          const distance=Math.max(Math.abs(offset)>1?Math.abs(offset):fallback,minimum);
+          nextX=reference.x-child.w/2;nextY=reference.y+side*distance-child.h/2;
+          childEndpoint.port=side>0?'top':'bottom';
+          if(anchorEndpoint&&anchorEndpoint.kind==='tile')anchorEndpoint.port=side>0?'bottom':'top';
+        } else {
+          const offset=childCentre.x-reference.x,side=Math.abs(offset)>1?Math.sign(offset):1;
+          const fallback=Math.abs(childCentre.y-reference.y),minimum=(superior?superior.w/2:0)+child.w/2+48;
+          const distance=Math.max(Math.abs(offset)>1?Math.abs(offset):fallback,minimum);
+          nextX=reference.x+side*distance-child.w/2;nextY=reference.y-child.h/2;
+          childEndpoint.port=side>0?'left':'right';
+          if(anchorEndpoint&&anchorEndpoint.kind==='tile')anchorEndpoint.port=side>0?'right':'left';
+        }
+        link.axisLock=orientation;link.type='elbow';link.flow=orientation;link.bends=[];
+        applyTilePositions(new Map([[child.id,{x:nextX,y:nextY}]]));
+        showToast(`${orientation[0].toUpperCase()+orientation.slice(1)} line lock enabled`);
+      }
+
+      function renderLinkInspector() {
+        const link=state.links.find(item=>item.id===selectedLinkId);
+        if(!link) return renderInspector();
+        const canOrient=!!subordinateTileForLink(link);
+        inspector.innerHTML=`<h2>Link</h2>
+          <div class="field"><label>Line type</label><select id="linkType"${link.axisLock?' disabled':''}><option value="direct"${link.type==='direct'?' selected':''}>Direct</option><option value="curved"${link.type==='curved'?' selected':''}>Curved</option><option value="elbow"${link.type==='elbow'?' selected':''}>Elbow</option><option value="spline"${link.type==='spline'?' selected':''}>Spline</option></select></div>
+          <div class="field"><label>Branch direction</label><select id="linkFlow"${link.axisLock?' disabled':''}><option value="auto"${link.flow==='auto'?' selected':''}>Automatic</option><option value="horizontal"${link.flow==='horizontal'?' selected':''}>Horizontal</option><option value="vertical"${link.flow==='vertical'?' selected':''}>Vertical</option></select></div>
+          <div class="button-row"><button id="makeLineVertical" class="${link.axisLock==='vertical'?'active':''}" aria-pressed="${link.axisLock==='vertical'}"${canOrient?'':' disabled'}>Make vertical</button><button id="makeLineHorizontal" class="${link.axisLock==='horizontal'?'active':''}" aria-pressed="${link.axisLock==='horizontal'}"${canOrient?'':' disabled'}>Make horizontal</button></div>
+          <p>${link.axisLock?`The ${link.axisLock} orientation is locked. Tile alignment and spacing can now expand or contract this branch without making it diagonal. Click the active button to unlock it.`:'Choose an orientation to pull the subordinate tile into place and lock the line to that routing direction.'}</p>
+          <div class="field-row"><div class="field"><label>Line colour</label><input id="linkColor" type="color" value="${link.color}" /></div><div class="field"><label>Thickness</label><input id="linkWidth" type="number" min="1" max="20" step="0.5" value="${link.width}" /></div></div>
+          <label class="check-row"><input id="linkDashed" type="checkbox"${link.dashed?' checked':''} /> Dashed line</label>
+          <p>${link.bends.length?link.bends.length+' custom bend point'+(link.bends.length===1?'':'s'):'The line is using automatic routing.'} Drag the line to reposition its route.${link.from.kind==='link'||link.to.kind==='link'?' Drag the violet attachment point to slide it along its parent branch.':''} Drag this branch over another line to attach its subordinate tile and subtree to that branch. The target spine stays intact and stretches with its tiles, while the duplicate upstream route is removed.</p>
+          <div class="button-row"><button id="addBend"${link.axisLock?' disabled':''}>＋ Add bend</button><button id="removeBend"${!link.bends.length||link.axisLock?' disabled':''}>− Last bend</button></div>
+          <button id="deleteLink" class="danger" style="width:100%">Remove link</button>`;
+        bindField('#linkType','change',event=>{link.type=event.target.value;renderAll();});
+        bindField('#linkFlow','change',event=>{link.flow=event.target.value;renderAll();});
+        bindField('#makeLineVertical','click',()=>orientLink(link,'vertical'));
+        bindField('#makeLineHorizontal','click',()=>orientLink(link,'horizontal'));
+        bindField('#linkColor','input',event=>{link.color=event.target.value;renderLinks();});
+        bindField('#linkWidth','change',event=>{link.width=clamp(Number(event.target.value)||2.5,1,20);renderLinks();});
+        bindField('#linkDashed','change',event=>{link.dashed=event.target.checked;renderLinks();});
+        bindField('#addBend','click',()=>addBend(link));
+        bindField('#removeBend','click',()=>{link.bends.pop();renderAll();});
+        bindField('#deleteLink','click',deleteSelection);
+      }
+
+      function renderTitleInspector() {
+        const style=state.titleText;
+        inspector.innerHTML=`<h2>Main title</h2>
+          <p>Edit the title here or drag it directly to a new position on the canvas.</p>
+          <div class="field"><label>Title text</label><input id="inspectorTitle" type="text" value="${escAttr(state.title)}" /></div>
+          <label class="check-row"><input id="inspectorTitleVisible" type="checkbox"${state.titleVisible?' checked':''} /> Show on canvas</label>
+          <h2>Text style</h2>
+          <div class="field"><label>Web font</label><select id="titleFont">${fontOptions(style.font)}</select></div>
+          <div class="field"><label>Alignment</label><select id="titleAlign"><option value="left"${style.align==='left'?' selected':''}>Left</option><option value="center"${style.align==='center'?' selected':''}>Centre</option><option value="right"${style.align==='right'?' selected':''}>Right</option></select></div>
+          <div class="field-row three">
+            <div class="field"><label>Size</label><input id="titleSize" type="number" min="8" max="160" value="${style.size}" /></div>
+            <div class="field"><label>Colour</label><input id="titleColor" type="color" value="${style.color}" /></div>
+            <div class="button-row" style="margin:0"><button id="titleBold" class="format-toggle${style.bold?' active':''}">B</button><button id="titleItalic" class="format-toggle italic${style.italic?' active':''}">I</button></div>
+          </div>
+          <h2>Position</h2>
+          <div class="field-row"><div class="field"><label>Horizontal position</label><input id="titleX" type="number" value="${Math.round(state.titleX)}" /></div><div class="field"><label>Vertical position</label><input id="titleY" type="number" value="${Math.round(state.titleY)}" /></div></div>
+          <button id="resetTitlePosition" style="width:100%">Reset title position</button>`;
+        bindField('#inspectorTitle','input',event=>{state.title=event.target.value;$('#projectTitle').value=state.title;renderTitle();updateEdgeArrows();});
+        bindField('#inspectorTitleVisible','change',event=>{state.titleVisible=event.target.checked;$('#showTitle').checked=state.titleVisible;if(!state.titleVisible)selectedTitle=false;renderAll();});
+        bindField('#titleFont','change',event=>{style.font=event.target.value;renderAll();});
+        bindField('#titleAlign','change',event=>{style.align=event.target.value;renderAll();});
+        bindField('#titleSize','change',event=>{style.size=clamp(Number(event.target.value)||32,8,160);renderAll();});
+        bindField('#titleColor','input',event=>{style.color=event.target.value;renderTitle();});
+        bindField('#titleBold','click',()=>{style.bold=!style.bold;renderAll();});
+        bindField('#titleItalic','click',()=>{style.italic=!style.italic;renderAll();});
+        bindField('#titleX','change',event=>{state.titleX=Number(event.target.value)||0;renderAll();});
+        bindField('#titleY','change',event=>{state.titleY=Number(event.target.value)||0;renderAll();});
+        bindField('#resetTitlePosition','click',()=>{state.titleX=-260;state.titleY=-190;renderAll();});
+      }
+
+      function renderTextBoxInspector() {
+        const box=state.textBoxes.find(item=>item.id===selectedTextBoxId);
+        if(!box)return renderInspector();
+        const style=box.style;
+        inspector.innerHTML=`<h2>Text box</h2>
+          <p>Edit here or type directly inside the selected text box. Drag the box to move it.</p>
+          <div class="field"><label>Text</label><textarea id="textBoxText">${escapeHtml(box.text)}</textarea></div>
+          <h2>Text style</h2>
+          <div class="field"><label>Web font</label><select id="textBoxFont">${fontOptions(style.font)}</select></div>
+          <div class="field"><label>Alignment</label><select id="textBoxAlign"><option value="left"${style.align==='left'?' selected':''}>Left</option><option value="center"${style.align==='center'?' selected':''}>Centre</option><option value="right"${style.align==='right'?' selected':''}>Right</option></select></div>
+          <div class="field-row three">
+            <div class="field"><label>Size</label><input id="textBoxSize" type="number" min="8" max="160" value="${style.size}" /></div>
+            <div class="field"><label>Colour</label><input id="textBoxColor" type="color" value="${style.color}" /></div>
+            <div class="button-row" style="margin:0"><button id="textBoxBold" class="format-toggle${style.bold?' active':''}">B</button><button id="textBoxItalic" class="format-toggle italic${style.italic?' active':''}">I</button></div>
+          </div>
+          <h2>Size & rotation</h2>
+          <div class="field-row"><div class="field"><label>Width</label><input id="textBoxWidth" type="number" min="40" max="2000" value="${Math.round(box.w)}" /></div><div class="field"><label>Height</label><input id="textBoxHeight" type="number" min="30" max="1200" value="${Math.round(box.h)}" /></div></div>
+          <div class="field"><label>Rotation (degrees)</label><input id="textBoxRotation" type="number" min="-360" max="360" step="1" value="${Math.round(box.rotation)}" /></div>
+          <h2>Actions</h2>
+          <div class="button-row"><button id="duplicateTextBox">Duplicate</button><button id="resetTextRotation">Reset rotation</button></div>
+          <button id="deleteTextBox" class="danger" style="width:100%">Delete text box</button>`;
+        bindField('#textBoxText','input',event=>{box.text=event.target.value;renderTextBoxes();});
+        bindField('#textBoxFont','change',event=>{style.font=event.target.value;renderAll();});
+        bindField('#textBoxAlign','change',event=>{style.align=event.target.value;renderAll();});
+        bindField('#textBoxSize','change',event=>{style.size=clamp(Number(event.target.value)||24,8,160);renderAll();});
+        bindField('#textBoxColor','input',event=>{style.color=event.target.value;renderTextBoxes();});
+        bindField('#textBoxBold','click',()=>{style.bold=!style.bold;renderAll();});
+        bindField('#textBoxItalic','click',()=>{style.italic=!style.italic;renderAll();});
+        bindField('#textBoxWidth','change',event=>{box.w=clamp(Number(event.target.value)||260,40,2000);renderAll();});
+        bindField('#textBoxHeight','change',event=>{box.h=clamp(Number(event.target.value)||80,30,1200);renderAll();});
+        bindField('#textBoxRotation','input',event=>{box.rotation=clamp(Number(event.target.value)||0,-360,360);renderTextBoxes();updateEdgeArrows();});
+        bindField('#duplicateTextBox','click',duplicateSelection);
+        bindField('#resetTextRotation','click',()=>{box.rotation=0;renderAll();});
+        bindField('#deleteTextBox','click',deleteSelection);
+      }
+
+      function renderInspector() {
+        if(selectedTiles.size) return renderTileInspector();
+        if(selectedShapeId) return renderShapeInspector();
+        if(selectedTextBoxId) return renderTextBoxInspector();
+        if(selectedLinkId) return renderLinkInspector();
+        if(selectedTitle) return renderTitleInspector();
+        inspector.innerHTML=`<h2>Nothing selected</h2><div class="inspector-empty">Click the main title, a tile, shape or link to edit it.<br /><br />Select a tile to reveal its four connection points.</div><h2>Quick start</h2><p>Add a tile, then use one of its + connectors. Click a connector on another tile—or click an existing line—to complete the branch.</p>`;
+      }
+
+      function clearSelection() { selectedTiles.clear(); selectedShapeId=null; selectedTextBoxId=null; selectedLinkId=null; selectedTitle=false; }
+
+      function selectTile(id, additive=false) {
+        selectedShapeId=null;selectedTextBoxId=null;selectedLinkId=null;selectedTitle=false;
+        if(additive){ if(selectedTiles.has(id))selectedTiles.delete(id);else selectedTiles.add(id); }
+        else { if(!(selectedTiles.size===1&&selectedTiles.has(id))){selectedTiles.clear();selectedTiles.add(id);} }
+        renderAll();
+      }
+
+      function startLinkMode(endpoint=null) {
+        viewport.classList.add('linking'); linkDraft=endpoint;
+        $('#modePill').textContent=endpoint?'Choose the destination connector or line':'Choose a starting connector or line';
+        renderAll();
+      }
+      function cancelLinkMode() { viewport.classList.remove('linking');linkDraft=null;$('#modePill').textContent='Select mode';renderAll(); }
+
+      function completeLink(endpoint) {
+        if(!linkDraft) { linkDraft=endpoint; viewport.classList.add('linking'); $('#modePill').textContent='Choose the destination connector or line'; renderAll(); return; }
+        if(linkDraft.kind==='tile'&&endpoint.kind==='tile'&&linkDraft.id===endpoint.id&&linkDraft.port===endpoint.port){showToast('Choose a different destination');return;}
+        const a=endpointPoint(linkDraft), b=endpointPoint(endpoint);
+        const flow=autoFlow(a,b);
+        state.links.push({id:uid('link'),from:clone(linkDraft),to:clone(endpoint),type:'elbow',flow,axisLock:null,dashed:false,color:'#64748b',width:2.5,bends:[]});
+        clearSelection();selectedLinkId=state.links[state.links.length-1].id;
+        viewport.classList.remove('linking');linkDraft=null;$('#modePill').textContent='Select mode';
+        renderAll(); showToast('Link added');
+      }
+
+      function addTile() {
+        const centre=clientToWorld(viewport.getBoundingClientRect().left+viewport.clientWidth/2,viewport.getBoundingClientRect().top+viewport.clientHeight/2);
+        const tile=createTile(centre.x-115,centre.y-66);
+        state.tiles.push(tile);clearSelection();selectedTiles.add(tile.id);renderAll();
+      }
+      function addShape() {
+        const centre=clientToWorld(viewport.getBoundingClientRect().left+viewport.clientWidth/2,viewport.getBoundingClientRect().top+viewport.clientHeight/2);
+        const shape=createShape(centre.x-180,centre.y-115);state.shapes.push(shape);clearSelection();selectedShapeId=shape.id;renderAll();
+      }
+      function addTextBox() {
+        const centre=clientToWorld(viewport.getBoundingClientRect().left+viewport.clientWidth/2,viewport.getBoundingClientRect().top+viewport.clientHeight/2);
+        const box=createTextBox(centre.x-130,centre.y-40);state.textBoxes.push(box);clearSelection();selectedTextBoxId=box.id;renderAll();
+      }
+
+      function deleteSelection() {
+        if(selectedTiles.size){
+          const ids=new Set(selectedTiles);state.tiles=state.tiles.filter(tile=>!ids.has(tile.id));
+          state.links=state.links.filter(link=>!((link.from.kind==='tile'&&ids.has(link.from.id))||(link.to.kind==='tile'&&ids.has(link.to.id))));
+          if(ids.has(state.defaultCenterId))state.defaultCenterId=null;
+        } else if(selectedShapeId) state.shapes=state.shapes.filter(shape=>shape.id!==selectedShapeId);
+        else if(selectedTextBoxId) state.textBoxes=state.textBoxes.filter(box=>box.id!==selectedTextBoxId);
+        else if(selectedLinkId){
+          const removed=selectedLinkId;state.links=state.links.filter(link=>link.id!==removed&&!(link.from.kind==='link'&&link.from.id===removed)&&!(link.to.kind==='link'&&link.to.id===removed));
+        } else if(selectedTitle){state.titleVisible=false;selectedTitle=false;}
+        else return;
+        clearSelection();renderAll();showToast('Removed');
+      }
+
+      function copySelection() {
+        if(selectedTiles.size) clipboard={kind:'tiles',items:clone(state.tiles.filter(tile=>selectedTiles.has(tile.id)))};
+        else if(selectedShapeId){const shape=state.shapes.find(item=>item.id===selectedShapeId);if(shape)clipboard={kind:'shape',items:[clone(shape)]};}
+        else if(selectedTextBoxId){const box=state.textBoxes.find(item=>item.id===selectedTextBoxId);if(box)clipboard={kind:'textBox',items:[clone(box)]};}
+        else return;
+        showToast('Copied');
+      }
+
+      function pasteSelection() {
+        if(!clipboard)return;
+        clearSelection();
+        if(clipboard.kind==='tiles') clipboard.items.forEach(source=>{const tile=clone(source);tile.id=uid('tile');tile.x+=34;tile.y+=34;state.tiles.push(tile);selectedTiles.add(tile.id);});
+        else if(clipboard.kind==='shape'){const shape=clone(clipboard.items[0]);shape.id=uid('shape');shape.x+=34;shape.y+=34;shape.locked=false;state.shapes.push(shape);selectedShapeId=shape.id;}
+        else {const box=clone(clipboard.items[0]);box.id=uid('text');box.x+=34;box.y+=34;state.textBoxes.push(box);selectedTextBoxId=box.id;}
+        clipboard=clone(clipboard);clipboard.items.forEach(item=>{item.x+=34;item.y+=34;});renderAll();showToast('Pasted');
+      }
+      function duplicateSelection(){copySelection();pasteSelection();}
+
+      function linkControlStartsForSelection(tileIds) {
+        return state.links.filter(link=>{
+          const downstreamSelected=link.to&&link.to.kind==='tile'&&tileIds.has(link.to.id);
+          const sourceSelected=link.from&&link.from.kind==='tile'&&tileIds.has(link.from.id);
+          return downstreamSelected||(sourceSelected&&link.to&&link.to.kind!=='tile');
+        }).map(link=>({id:link.id,bends:clone(link.bends||[])}));
+      }
+
+      function beginItemDrag(event, kind, id) {
+        if(event.button!==0)return;
+        const point=clientToWorld(event.clientX,event.clientY);
+        if(kind==='tile'){
+          renderAlignmentGuides();
+          if(event.shiftKey) selectTile(id,true);
+          else if(!selectedTiles.has(id)) selectTile(id,false);
+          if(!selectedTiles.has(id)) { interaction=null; return; }
+          const starts=state.tiles.filter(tile=>selectedTiles.has(tile.id)).map(tile=>({id:tile.id,x:tile.x,y:tile.y}));
+          const linkStarts=linkControlStartsForSelection(selectedTiles);
+          interaction={type:'moveTiles',start:point,starts,linkStarts};
+        } else {
+          const shape=state.shapes.find(item=>item.id===id); if(!shape)return;
+          clearSelection();selectedShapeId=id;renderAll();interaction={type:'moveShape',start:point,id,x:shape.x,y:shape.y};
+          if(shape.locked) { interaction=null; event.preventDefault(); return; }
+        }
+        event.preventDefault();
+      }
+
+      tileLayer.addEventListener('pointerdown',event=>{
+        const editor=event.target.closest('.tile-edit-field[contenteditable="true"]');
+        if(editor){event.stopPropagation();return;}
+        const connector=event.target.closest('.connector');
+        if(connector){event.stopPropagation();completeLink({kind:'tile',id:connector.dataset.tile,port:connector.dataset.port});return;}
+        const handle=event.target.closest('[data-resize-tile]');
+        if(handle){const tile=state.tiles.find(item=>item.id===handle.dataset.resizeTile);interaction={type:'resizeTile',start:clientToWorld(event.clientX,event.clientY),id:tile.id,w:tile.w,h:tile.h};event.preventDefault();event.stopPropagation();return;}
+        const element=event.target.closest('.tile'); if(element)beginItemDrag(event,'tile',element.dataset.id);
+      });
+
+      tileLayer.addEventListener('input',event=>{
+        const editor=event.target.closest('.tile-edit-field[contenteditable="true"]');
+        if(!editor)return;
+        const tile=state.tiles.find(item=>item.id===editor.dataset.editTile);
+        const field=editor.dataset.editField;
+        if(!tile||!['heading','subheading','note'].includes(field))return;
+        tile[field]=editor.textContent;
+        const inspectorControl=$({heading:'#tileHeading',subheading:'#tileSubheading',note:'#tileNote'}[field],inspector);
+        if(inspectorControl&&document.activeElement!==inspectorControl)inspectorControl.value=tile[field];
+      });
+
+      tileLayer.addEventListener('keydown',event=>{
+        const editor=event.target.closest('.tile-edit-field[contenteditable="true"]');
+        if(!editor||event.key!=='Tab')return;
+        const fields=$$('.tile-edit-field[contenteditable="true"]',editor.closest('.tile'));
+        const current=fields.indexOf(editor);
+        const next=fields[(current+(event.shiftKey?-1:1)+fields.length)%fields.length];
+        if(!next)return;
+        event.preventDefault();next.focus();
+        const selection=window.getSelection(),range=document.createRange();
+        range.selectNodeContents(next);range.collapse(false);selection.removeAllRanges();selection.addRange(range);
+      });
+
+      tileLayer.addEventListener('paste',event=>{
+        const editor=event.target.closest('.tile-edit-field[contenteditable="true"]');
+        if(!editor)return;
+        event.preventDefault();
+        const text=event.clipboardData.getData('text/plain');
+        const selection=window.getSelection();
+        if(!selection.rangeCount)return;
+        const range=selection.getRangeAt(0);range.deleteContents();
+        const node=document.createTextNode(text);range.insertNode(node);range.setStartAfter(node);range.collapse(true);
+        selection.removeAllRanges();selection.addRange(range);editor.dispatchEvent(new Event('input',{bubbles:true}));
+      });
+
+      textLayer.addEventListener('pointerdown',event=>{
+        const editor=event.target.closest('.text-box-content[contenteditable="true"]');
+        if(editor){event.stopPropagation();return;}
+        const handle=event.target.closest('[data-resize-text]');
+        if(handle){
+          const box=state.textBoxes.find(item=>item.id===handle.dataset.resizeText);if(!box)return;
+          interaction={type:'resizeTextBox',start:clientToWorld(event.clientX,event.clientY),id:box.id,w:box.w,h:box.h};
+          event.preventDefault();event.stopPropagation();return;
+        }
+        const element=event.target.closest('.text-box');if(!element||event.button!==0)return;
+        const box=state.textBoxes.find(item=>item.id===element.dataset.id);if(!box)return;
+        clearSelection();selectedTextBoxId=box.id;
+        interaction={type:'moveTextBox',start:clientToWorld(event.clientX,event.clientY),id:box.id,x:box.x,y:box.y};
+        renderAll();event.preventDefault();event.stopPropagation();
+      });
+
+      textLayer.addEventListener('input',event=>{
+        const editor=event.target.closest('.text-box-content[contenteditable="true"]');if(!editor)return;
+        const box=state.textBoxes.find(item=>item.id===editor.closest('.text-box').dataset.id);if(!box)return;
+        box.text=editor.textContent;
+        const field=$('#textBoxText',inspector);if(field&&document.activeElement!==field)field.value=box.text;
+      });
+
+      textLayer.addEventListener('paste',event=>{
+        const editor=event.target.closest('.text-box-content[contenteditable="true"]');if(!editor)return;
+        event.preventDefault();const text=event.clipboardData.getData('text/plain'),selection=window.getSelection();if(!selection.rangeCount)return;
+        const range=selection.getRangeAt(0);range.deleteContents();const node=document.createTextNode(text);range.insertNode(node);range.setStartAfter(node);range.collapse(true);
+        selection.removeAllRanges();selection.addRange(range);editor.dispatchEvent(new Event('input',{bubbles:true}));
+      });
+
+      shapeLayer.addEventListener('pointerdown',event=>{
+        const handle=event.target.closest('[data-resize-shape]');
+        if(handle){const shape=state.shapes.find(item=>item.id===handle.dataset.resizeShape);if(!shape||shape.locked)return;interaction={type:'resizeShape',start:clientToWorld(event.clientX,event.clientY),id:shape.id,x:shape.x,y:shape.y,w:shape.w,h:shape.h,corner:handle.dataset.corner};event.preventDefault();event.stopPropagation();return;}
+        const element=event.target.closest('.shape');if(element)beginItemDrag(event,'shape',element.dataset.id);
+      });
+
+      titleWorld.addEventListener('pointerdown',event=>{
+        if(event.button!==0||!state.titleVisible)return;
+        clearSelection();selectedTitle=true;
+        interaction={type:'moveTitle',start:clientToWorld(event.clientX,event.clientY),x:state.titleX,y:state.titleY};
+        renderAll();event.preventDefault();event.stopPropagation();
+      });
+
+      linkLayer.addEventListener('pointerdown',event=>{
+        const anchor=event.target.closest('.link-anchor-dot.draggable');
+        if(anchor){
+          const child=state.links.find(item=>item.id===anchor.dataset.childLink);
+          const endpoint=child && child[anchor.dataset.endpoint];
+          if(child&&endpoint&&endpoint.kind==='link'){
+            interaction={type:'anchor',childLinkId:child.id,endpointKey:anchor.dataset.endpoint,parentLinkId:endpoint.id};
+            event.preventDefault();event.stopPropagation();return;
+          }
+        }
+        const bend=event.target.closest('.bend-handle');
+        if(bend){const link=state.links.find(item=>item.id===bend.dataset.link);const point=link.bends[Number(bend.dataset.bend)];interaction={type:'bend',start:clientToWorld(event.clientX,event.clientY),linkId:link.id,index:Number(bend.dataset.bend),x:point.x,y:point.y};event.preventDefault();event.stopPropagation();return;}
+        const path=event.target.closest('.link-hit');if(!path)return;
+        const link=state.links.find(item=>item.id===path.dataset.link);if(!link)return;
+        if(viewport.classList.contains('linking')){const point=clientToWorld(event.clientX,event.clientY);completeLink({kind:'link',id:link.id,t:nearestTOnLink(link,point)});event.stopPropagation();return;}
+        selectedLinkId=link.id;selectedTiles.clear();selectedShapeId=null;selectedTextBoxId=null;selectedTitle=false;
+        if(link.axisLock){renderAll();showToast(`The ${link.axisLock} line lock is active`);event.preventDefault();event.stopPropagation();return;}
+        interaction={type:'dragLine',start:clientToWorld(event.clientX,event.clientY),linkId:link.id,activated:false,bendStarts:[],snapCandidate:null};
+        renderAll();event.preventDefault();event.stopPropagation();
+      });
+      linkLayer.addEventListener('contextmenu',event=>{const path=event.target.closest('.link-hit');if(path){event.preventDefault();const link=state.links.find(item=>item.id===path.dataset.link);if(link){selectedLinkId=link.id;selectedTiles.clear();selectedShapeId=null;selectedTextBoxId=null;selectedTitle=false;renderAll();}}});
+
+      viewport.addEventListener('pointerdown',event=>{
+        if(event.target.closest('.edge-arrow')||event.target.closest('.tile')||event.target.closest('.text-box')||event.target.closest('.shape')||event.target.closest('.link-hit')||event.target.closest('#titleWorld'))return;
+        const rect=viewport.getBoundingClientRect();
+        if(event.button===1||spaceDown||(event.button===0&&!event.shiftKey)){interaction={type:'pan',clientX:event.clientX,clientY:event.clientY,x:camera.x,y:camera.y,moved:false,clearOnClick:event.button===0&&!spaceDown};viewport.classList.add('panning');event.preventDefault();return;}
+        if(event.button!==0)return;
+        interaction={type:'selectBox',startClient:{x:event.clientX-rect.left,y:event.clientY-rect.top},additive:true};
+        $('#selectionBox').style.display='block';event.preventDefault();renderAll();
+      });
+
+      window.addEventListener('pointermove',event=>{
+        if(!interaction)return;
+        const point=clientToWorld(event.clientX,event.clientY);
+        if(interaction.type==='moveTiles'){
+          const snap=tileAlignmentSnap(interaction.starts,point.x-interaction.start.x,point.y-interaction.start.y),dx=snap.dx,dy=snap.dy;
+          interaction.starts.forEach(start=>{const tile=state.tiles.find(item=>item.id===start.id);if(tile){tile.x=start.x+dx;tile.y=start.y+dy;}});
+          interaction.linkStarts.forEach(start=>{const link=state.links.find(item=>item.id===start.id);if(link)link.bends=start.bends.map(bend=>({...bend,x:bend.x+dx,y:bend.y+dy}));});
+          renderAlignmentGuides(snap.guides);
+          renderAll(true);
+        } else if(interaction.type==='moveShape'){
+          const shape=state.shapes.find(item=>item.id===interaction.id);shape.x=interaction.x+point.x-interaction.start.x;shape.y=interaction.y+point.y-interaction.start.y;renderAll(true);
+        } else if(interaction.type==='moveTextBox'){
+          const box=state.textBoxes.find(item=>item.id===interaction.id);if(box){box.x=interaction.x+point.x-interaction.start.x;box.y=interaction.y+point.y-interaction.start.y;renderAll(true);}
+        } else if(interaction.type==='resizeTile'){
+          const tile=state.tiles.find(item=>item.id===interaction.id);tile.w=clamp(interaction.w+point.x-interaction.start.x,90,1200);tile.h=clamp(interaction.h+point.y-interaction.start.y,60,800);renderAll(true);
+        } else if(interaction.type==='resizeTextBox'){
+          const box=state.textBoxes.find(item=>item.id===interaction.id);if(box){box.w=clamp(interaction.w+point.x-interaction.start.x,40,2000);box.h=clamp(interaction.h+point.y-interaction.start.y,30,1200);renderAll(true);}
+        } else if(interaction.type==='resizeShape'){
+          const shape=state.shapes.find(item=>item.id===interaction.id);
+          const dx=point.x-interaction.start.x,dy=point.y-interaction.start.y,corner=interaction.corner;
+          if(shape.type==='rectangle'){
+            let left=interaction.x,right=interaction.x+interaction.w,top=interaction.y,bottom=interaction.y+interaction.h;
+            if(corner.includes('w'))left=Math.min(right-30,interaction.x+dx);else right=Math.max(left+30,interaction.x+interaction.w+dx);
+            if(corner.includes('n'))top=Math.min(bottom-30,interaction.y+dy);else bottom=Math.max(top+30,interaction.y+interaction.h+dy);
+            shape.x=left;shape.y=top;shape.w=Math.min(3000,right-left);shape.h=Math.min(3000,bottom-top);
+          } else {
+            const delta=corner==='se'?Math.max(dx,dy):corner==='nw'?Math.max(-dx,-dy):corner==='ne'?Math.max(dx,-dy):Math.max(-dx,dy);
+            const size=clamp(interaction.w+delta,30,3000);
+            shape.w=size;shape.h=size;
+            if(corner==='nw'){shape.x=interaction.x+interaction.w-size;shape.y=interaction.y+interaction.h-size;}
+            else if(corner==='ne'){shape.x=interaction.x;shape.y=interaction.y+interaction.h-size;}
+            else if(corner==='sw'){shape.x=interaction.x+interaction.w-size;shape.y=interaction.y;}
+            else {shape.x=interaction.x;shape.y=interaction.y;}
+          }
+          renderAll(true);
+        } else if(interaction.type==='moveTitle'){
+          state.titleX=interaction.x+point.x-interaction.start.x;state.titleY=interaction.y+point.y-interaction.start.y;
+          renderTitle();updateEdgeArrows();
+        } else if(interaction.type==='bend'){
+          const link=state.links.find(item=>item.id===interaction.linkId);const bend=link.bends[interaction.index];bend.x=interaction.x+point.x-interaction.start.x;bend.y=interaction.y+point.y-interaction.start.y;renderLinks();updateEdgeArrows();
+        } else if(interaction.type==='anchor'){
+          const child=state.links.find(item=>item.id===interaction.childLinkId);
+          const parent=state.links.find(item=>item.id===interaction.parentLinkId);
+          const endpoint=child && child[interaction.endpointKey];
+          if(parent&&endpoint&&endpoint.kind==='link'){endpoint.t=nearestTOnLink(parent,point);renderLinks();updateEdgeArrows();}
+        } else if(interaction.type==='dragLine'){
+          const link=state.links.find(item=>item.id===interaction.linkId);
+          if(!link)return;
+          const dx=point.x-interaction.start.x,dy=point.y-interaction.start.y;
+          if(!interaction.activated&&Math.hypot(dx,dy)*camera.zoom>=3){
+            interaction.activated=true;
+            if(link.type==='direct')link.type='elbow';
+            else if(link.type==='curved')link.type='spline';
+            if(!link.bends.length){const a=endpointPoint(link.from),b=endpointPoint(link.to);link.bends=defaultElbowPoints(a,b,link.flow);}
+            interaction.bendStarts=link.bends.map(bend=>({x:bend.x,y:bend.y}));
+          }
+          if(interaction.activated){
+            link.bends=interaction.bendStarts.map(bend=>({x:bend.x+dx,y:bend.y+dy}));
+            const snap=findBranchSnap(link,point);
+            if(snap&&link.bends.length){
+              let bendIndex=0,bestDistance=Infinity;
+              link.bends.forEach((bend,index)=>{const distance=Math.hypot(bend.x-point.x,bend.y-point.y);if(distance<bestDistance){bestDistance=distance;bendIndex=index;}});
+              link.bends[bendIndex]={x:snap.point.x,y:snap.point.y};
+              interaction.snapCandidate={...snap,bendIndex};$('#modePill').textContent='Release to merge branch';
+            } else {interaction.snapCandidate=null;$('#modePill').textContent='Select mode';}
+            renderLinks();updateEdgeArrows();
+          }
+        } else if(interaction.type==='pan'){
+          if(Math.hypot(event.clientX-interaction.clientX,event.clientY-interaction.clientY)>=3)interaction.moved=true;
+          camera.x=interaction.x+event.clientX-interaction.clientX;camera.y=interaction.y+event.clientY-interaction.clientY;updateCamera();
+        } else if(interaction.type==='selectBox'){
+          const rect=viewport.getBoundingClientRect();const current={x:event.clientX-rect.left,y:event.clientY-rect.top};
+          const left=Math.min(current.x,interaction.startClient.x),top=Math.min(current.y,interaction.startClient.y),width=Math.abs(current.x-interaction.startClient.x),height=Math.abs(current.y-interaction.startClient.y);
+          Object.assign($('#selectionBox').style,{left:left+'px',top:top+'px',width:width+'px',height:height+'px'});
+        }
+      });
+
+      window.addEventListener('pointerup',event=>{
+        renderAlignmentGuides();
+        if(!interaction)return;
+        let mergedBranch=false;
+        if(interaction.type==='selectBox'){
+          const rect=viewport.getBoundingClientRect();const a=clientToWorld(rect.left+interaction.startClient.x,rect.top+interaction.startClient.y);const b=clientToWorld(event.clientX,event.clientY);
+          const box={x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),w:Math.abs(a.x-b.x),h:Math.abs(a.y-b.y)};
+          if(!interaction.additive)selectedTiles.clear();
+          if(box.w>3&&box.h>3)state.tiles.forEach(tile=>{if(tile.x<box.x+box.w&&tile.x+tile.w>box.x&&tile.y<box.y+box.h&&tile.y+tile.h>box.y)selectedTiles.add(tile.id);});
+          $('#selectionBox').style.display='none';selectedShapeId=null;selectedTextBoxId=null;selectedLinkId=null;selectedTitle=false;
+        } else if(interaction.type==='pan'&&interaction.clearOnClick&&!interaction.moved)clearSelection();
+        else if(interaction.type==='dragLine'&&interaction.snapCandidate){
+          const link=state.links.find(item=>item.id===interaction.linkId),snap=interaction.snapCandidate;
+          const target=state.links.find(item=>item.id===snap.targetLinkId);
+          if(link&&target){
+            const subordinate=subordinateEndpointForMerge(link,target);
+            link.from={kind:'link',id:target.id,t:snap.t};link.to=subordinate;
+            link.type='elbow';link.flow=linkDirectionAt(target,snap.t)==='vertical'?'horizontal':'vertical';link.bends=[];
+            mergedBranch=true;
+          }
+        }
+        $('#modePill').textContent='Select mode';
+        interaction=null;viewport.classList.remove('panning');renderAll();
+        if(mergedBranch)showToast('Branch merged — spine preserved');
+      });
+
+      viewport.addEventListener('wheel',event=>{
+        event.preventDefault();
+        const rect=viewport.getBoundingClientRect();const sx=event.clientX-rect.left,sy=event.clientY-rect.top;
+        const wx=(sx-camera.x)/camera.zoom,wy=(sy-camera.y)/camera.zoom;
+        const factor=Math.exp(-event.deltaY*.0012);const next=clamp(camera.zoom*factor,.1,3);
+        camera.x=sx-wx*next;camera.y=sy-wy*next;camera.zoom=next;updateCamera();
+      },{passive:false});
+
+      window.addEventListener('keydown',event=>{
+        const commandKey=event.metaKey||event.ctrlKey;
+        if(commandKey&&event.key.toLowerCase()==='z'){event.preventDefault();event.shiftKey?redo():undo();return;}
+        if(event.ctrlKey&&event.key.toLowerCase()==='y'){event.preventDefault();redo();return;}
+        const editing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)||document.activeElement.isContentEditable;
+        if(event.code==='Space'&&!editing){spaceDown=true;event.preventDefault();}
+        if(editing)return;
+        if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='c'){event.preventDefault();copySelection();}
+        if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='v'){event.preventDefault();beginHistory();pasteSelection();scheduleHistory();}
+        if((event.key==='Delete'||event.key==='Backspace')){event.preventDefault();beginHistory();deleteSelection();scheduleHistory();}
+        if(event.key==='Escape')cancelLinkMode();
+      });
+      window.addEventListener('keyup',event=>{if(event.code==='Space')spaceDown=false;});
+
+      function xmlEscape(value){return String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[char]));}
+      function wrapWords(text,maxChars){const words=String(text||'').split(/\s+/);const lines=[];let line='';words.forEach(word=>{if((line+' '+word).trim().length>maxChars&&line){lines.push(line);line=word;}else line=(line+' '+word).trim();});if(line)lines.push(line);return lines;}
+      function svgTextBlock(text,x,y,width,style,lineGap){
+        const chars=Math.max(8,Math.floor(width/(style.size*.58)));const lines=wrapWords(text,chars);const weight=style.bold?'800':'400';const italic=style.italic?'italic':'normal';
+        const align=style.align||'left',textX=align==='center'?x+width/2:align==='right'?x+width:x,anchor=align==='center'?'middle':align==='right'?'end':'start';
+        return `<text x="${textX}" y="${y}" text-anchor="${anchor}" fill="${style.color}" font-family="${xmlEscape(style.font)}" font-size="${style.size}" font-weight="${weight}" font-style="${italic}">${lines.map((line,index)=>`<tspan x="${textX}" dy="${index?style.size*lineGap:0}">${xmlEscape(line)}</tspan>`).join('')}</text>`;
+      }
+      function buildSvg() {
+        const bounds=getContentBounds(true);const ox=-bounds.x,oy=-bounds.y;const parts=[];
+        parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(bounds.w)}" height="${Math.ceil(bounds.h)}" viewBox="0 0 ${bounds.w} ${bounds.h}"><rect width="100%" height="100%" fill="${state.bgColor}"/><g transform="translate(${ox} ${oy})">`);
+        state.shapes.forEach(shape=>{const radius=shape.type==='circle'?Math.min(shape.w,shape.h)/2:shape.radius;parts.push(`<rect x="${shape.x}" y="${shape.y}" width="${shape.w}" height="${shape.h}" rx="${radius}" fill="${shape.bg}" fill-opacity="${shape.opacity}" stroke="${shape.borderColor}" stroke-width="${shape.borderWidth}"/>`);});
+        state.links.forEach(link=>parts.push(`<path d="${linkPath(link)}" fill="none" stroke="${link.color}" stroke-width="${link.width}"${link.dashed?' stroke-dasharray="10 8"':''}/>`));
+        if(state.titleVisible&&state.title)parts.push(svgTextBlock(state.title,state.titleX,state.titleY+state.titleText.size,520,state.titleText,1.2));
+        state.tiles.forEach(tile=>{
+          parts.push(`<rect x="${tile.x}" y="${tile.y}" width="${tile.w}" height="${tile.h}" rx="${tile.radius}" fill="${tile.bg}" stroke="${tile.borderColor}" stroke-width="${tile.borderWidth}"/>`);
+          let y=tile.y+tile.padding+tile.text.heading.size;const x=tile.x+tile.padding,width=tile.w-tile.padding*2;
+          parts.push(svgTextBlock(tile.heading,x,y,width,tile.text.heading,1.18));y+=tile.text.heading.size*1.35;
+          parts.push(svgTextBlock(tile.subheading,x,y,width,tile.text.subheading,1.18));y+=tile.text.subheading.size*1.55;
+          parts.push(svgTextBlock(tile.note,x,y,width,tile.text.note,1.22));
+        });
+        state.textBoxes.forEach(box=>{
+          const cx=box.x+box.w/2,cy=box.y+box.h/2,baseline=box.y+box.h/2+box.style.size*.35;
+          parts.push(`<g transform="rotate(${box.rotation} ${cx} ${cy})">${svgTextBlock(box.text,box.x,baseline,box.w,box.style,1.22)}</g>`);
+        });
+        parts.push('</g></svg>');return parts.join('');
+      }
+      function downloadBlob(content,type,filename){const blob=content instanceof Blob?content:new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+      function safeName(extension){const base=(state.title||'hierarchy').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'hierarchy';return base+'.'+extension;}
+      function exportSvg(){downloadBlob(buildSvg(),'image/svg+xml',safeName('svg'));showToast('SVG exported');}
+      function exportPng(){
+        const svg=buildSvg();const blob=new Blob([svg],{type:'image/svg+xml'});const url=URL.createObjectURL(blob);const image=new Image();
+        image.onload=()=>{const scale=Math.min(3,Math.max(1,2));const canvas=document.createElement('canvas');canvas.width=image.width*scale;canvas.height=image.height*scale;const ctx=canvas.getContext('2d');ctx.scale(scale,scale);ctx.drawImage(image,0,0);URL.revokeObjectURL(url);canvas.toBlob(result=>downloadBlob(result,'image/png',safeName('png')),'image/png');showToast('PNG exported');};
+        image.onerror=()=>{URL.revokeObjectURL(url);showToast('PNG export could not be rendered');};image.src=url;
+      }
+
+      function viewerScript() {
+        return `(()=>{'use strict';const data=JSON.parse(document.getElementById('hierarchy-data').textContent);const vp=document.getElementById('hv');const world=document.getElementById('hw');let cam={x:0,y:0,z:data.defaultZoom||1};const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));const tileBy=id=>data.tiles.find(t=>t.id===id);function port(t,p){return p==='top'?{x:t.x+t.w/2,y:t.y}:p==='bottom'?{x:t.x+t.w/2,y:t.y+t.h}:p==='left'?{x:t.x,y:t.y+t.h/2}:{x:t.x+t.w,y:t.y+t.h/2}}function endpoint(e,seen=[]){if(e.kind==='tile'){const t=tileBy(e.id);return t?port(t,e.port):{x:0,y:0}}if(e.kind==='link'){const l=data.links.find(v=>v.id===e.id);return l&&!seen.includes(l.id)?point(l,e.t||.5,[...seen,l.id]):{x:0,y:0}}return{x:e.x||0,y:e.y||0}}function flow(a,b,f){return f==='auto'?(Math.abs(b.x-a.x)>Math.abs(b.y-a.y)?'horizontal':'vertical'):f}function pts(l){const a=endpoint(l.from,[l.id]),b=endpoint(l.to,[l.id]);let bends=l.bends||[];if(!bends.length&&(l.type==='elbow'||l.type==='spline')){const f=flow(a,b,l.flow);bends=f==='horizontal'?[{x:(a.x+b.x)/2,y:a.y},{x:(a.x+b.x)/2,y:b.y}]:[{x:a.x,y:(a.y+b.y)/2},{x:b.x,y:(a.y+b.y)/2}]}return[a,...bends,b]}function path(l){const p=pts(l),a=p[0],b=p[p.length-1];if(l.type==='direct')return 'M '+a.x+' '+a.y+' L '+b.x+' '+b.y;if(l.type==='curved'){const f=flow(a,b,l.flow);return f==='horizontal'?'M '+a.x+' '+a.y+' C '+(a.x+(b.x-a.x)*.5)+' '+a.y+', '+(b.x-(b.x-a.x)*.5)+' '+b.y+', '+b.x+' '+b.y:'M '+a.x+' '+a.y+' C '+a.x+' '+(a.y+(b.y-a.y)*.5)+', '+b.x+' '+(b.y-(b.y-a.y)*.5)+', '+b.x+' '+b.y}if(l.type==='spline'){let d='M '+a.x+' '+a.y;for(let i=1;i<p.length-1;i++){const c=p[i],n=p[i+1];d+=' Q '+c.x+' '+c.y+' '+((c.x+n.x)/2)+' '+((c.y+n.y)/2)}return d+' T '+b.x+' '+b.y}return'M '+p.map(q=>q.x+' '+q.y).join(' L ')}function point(l,t){const p=pts(l),a=p[0],b=p[p.length-1];if(l.type==='curved'){const f=flow(a,b,l.flow),c1=f==='horizontal'?{x:a.x+(b.x-a.x)*.5,y:a.y}:{x:a.x,y:a.y+(b.y-a.y)*.5},c2=f==='horizontal'?{x:b.x-(b.x-a.x)*.5,y:b.y}:{x:b.x,y:b.y-(b.y-a.y)*.5},u=1-t;return{x:u*u*u*a.x+3*u*u*t*c1.x+3*u*t*t*c2.x+t*t*t*b.x,y:u*u*u*a.y+3*u*u*t*c1.y+3*u*t*t*c2.y+t*t*t*b.y}}let lens=[],total=0;for(let i=0;i<p.length-1;i++){let n=Math.hypot(p[i+1].x-p[i].x,p[i+1].y-p[i].y);lens.push(n);total+=n}let target=total*t;for(let i=0;i<lens.length;i++){if(target<=lens[i]||i===lens.length-1){let r=lens[i]?target/lens[i]:0;return{x:p[i].x+(p[i+1].x-p[i].x)*r,y:p[i].y+(p[i+1].y-p[i].y)*r}}target-=lens[i]}return b}function fs(s){return'font-family:'+s.font+';font-size:'+s.size+'px;font-weight:'+(s.bold?800:400)+';font-style:'+(s.italic?'italic':'normal')+';color:'+s.color}const esc=s=>String(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));let html='<div class="hs">';data.shapes.forEach(s=>{let r=s.type==='circle'?'50%':s.radius+'px';html+='<div class="hshape" style="left:'+s.x+'px;top:'+s.y+'px;width:'+s.w+'px;height:'+s.h+'px;background:'+s.bg+';opacity:'+s.opacity+';border:'+s.borderWidth+'px solid '+s.borderColor+';border-radius:'+r+'"></div>'});html+='</div><svg class="hl">';data.links.forEach(l=>html+='<path d="'+path(l)+'" fill="none" stroke="'+l.color+'" stroke-width="'+l.width+'" '+(l.dashed?'stroke-dasharray="10 8"':'')+'/>');html+='</svg><div class="htitle">'+esc(data.title)+'</div><div class="ht">';data.tiles.forEach(t=>{html+='<article class="htile" style="left:'+t.x+'px;top:'+t.y+'px;width:'+t.w+'px;height:'+t.h+'px;padding:'+t.padding+'px;background:'+t.bg+';border:'+t.borderWidth+'px solid '+t.borderColor+';border-radius:'+t.radius+'px"><div style="'+fs(t.text.heading)+'">'+esc(t.heading)+'</div><div class="sub" style="'+fs(t.text.subheading)+'">'+esc(t.subheading)+'</div><div class="note" style="'+fs(t.text.note)+'">'+esc(t.note)+'</div></article>'});world.innerHTML=html+'</div>';function bounds(){let a=[...data.tiles,...data.shapes];if(!a.length)return{x:-300,y:-200,w:600,h:400};let x=Math.min(...a.map(v=>v.x))-80,y=Math.min(...a.map(v=>v.y))-200,r=Math.max(...a.map(v=>v.x+v.w))+80,b=Math.max(...a.map(v=>v.y+v.h))+80;return{x,y,w:r-x,h:b-y}}function arrows(){const b=bounds(),tl={x:b.x*cam.z+cam.x,y:b.y*cam.z+cam.y},br={x:(b.x+b.w)*cam.z+cam.x,y:(b.y+b.h)*cam.z+cam.y};document.querySelector('[data-d="l"]').classList.toggle('show',tl.x<0);document.querySelector('[data-d="r"]').classList.toggle('show',br.x>vp.clientWidth);document.querySelector('[data-d="t"]').classList.toggle('show',tl.y<0);document.querySelector('[data-d="b"]').classList.toggle('show',br.y>vp.clientHeight)}function apply(){world.style.transform='translate('+cam.x+'px,'+cam.y+'px) scale('+cam.z+')';document.getElementById('hz').textContent=Math.round(cam.z*100)+'%';let g=32*cam.z;vp.style.backgroundSize=g+'px '+g+'px';vp.style.backgroundPosition=(cam.x%g)+'px '+(cam.y%g)+'px';arrows()}function centre(p,z=cam.z){cam.z=clamp(z,.1,3);cam.x=vp.clientWidth/2-p.x*cam.z;cam.y=vp.clientHeight/2-p.y*cam.z;apply()}function home(){let t=tileBy(data.defaultCenterId);if(t)centre({x:t.x+t.w/2,y:t.y+t.h/2},data.defaultZoom||1);else if(data.defaultCamera&&Number.isFinite(data.defaultCamera.centerX))centre({x:data.defaultCamera.centerX,y:data.defaultCamera.centerY},data.defaultCamera.zoom||data.defaultZoom||1);else fit()}function fit(){let b=bounds();centre({x:b.x+b.w/2,y:b.y+b.h/2},clamp(Math.min(vp.clientWidth/b.w,vp.clientHeight/b.h),.1,1.5))}vp.addEventListener('wheel',e=>{e.preventDefault();let r=vp.getBoundingClientRect(),sx=e.clientX-r.left,sy=e.clientY-r.top,wx=(sx-cam.x)/cam.z,wy=(sy-cam.y)/cam.z,n=clamp(cam.z*Math.exp(-e.deltaY*.0012),.1,3);cam.x=sx-wx*n;cam.y=sy-wy*n;cam.z=n;apply()},{passive:false});let drag=null;vp.addEventListener('pointerdown',e=>{if(e.target.closest('.controls'))return;drag={x:e.clientX,y:e.clientY,cx:cam.x,cy:cam.y};vp.setPointerCapture(e.pointerId)});vp.addEventListener('pointermove',e=>{if(drag){cam.x=drag.cx+e.clientX-drag.x;cam.y=drag.cy+e.clientY-drag.y;apply()}});vp.addEventListener('pointerup',()=>drag=null);document.getElementById('hp').onclick=()=>{cam.z=clamp(cam.z*1.2,.1,3);apply()};document.getElementById('hm').onclick=()=>{cam.z=clamp(cam.z/1.2,.1,3);apply()};document.getElementById('hh').onclick=home;document.getElementById('hf').onclick=fit;document.querySelectorAll('.arrow').forEach(a=>a.onclick=()=>{cam.x+=a.dataset.d==='l'?180:a.dataset.d==='r'?-180:0;cam.y+=a.dataset.d==='t'?140:a.dataset.d==='b'?-140:0;apply()});window.addEventListener('resize',apply);home()})();`;
+      }
+
+      function viewerFormattingScript() {
+        return `(()=>{const data=JSON.parse(document.getElementById('hierarchy-data').textContent);document.querySelectorAll('.htile').forEach((tile,index)=>{const source=data.tiles[index];if(!source)return;['heading','subheading','note'].forEach((field,fieldIndex)=>{if(tile.children[fieldIndex])tile.children[fieldIndex].style.textAlign=(source.text[field].align||'left')});if(source.__textBox){tile.style.transform='rotate('+(source.rotation||0)+'deg)';tile.style.transformOrigin='50% 50%';tile.style.boxShadow='none';tile.style.overflow='visible';if(tile.children[1])tile.children[1].style.display='none';if(tile.children[2])tile.children[2].style.display='none'}})})();`;
+      }
+
+      function buildViewerHtml() {
+        const viewerState=clone(state);
+        viewerState.tiles.push(...viewerState.textBoxes.map(box=>({
+          id:box.id,x:box.x,y:box.y,w:box.w,h:box.h,padding:0,bg:'transparent',borderColor:'transparent',borderWidth:0,radius:0,
+          heading:box.text,subheading:'',note:'',text:{heading:clone(box.style),subheading:clone(textDefaults.subheading),note:clone(textDefaults.note)},
+          __textBox:true,rotation:box.rotation
+        })));
+        if(viewerState.titleVisible&&viewerState.title)viewerState.shapes.push({id:'__title-bounds',x:viewerState.titleX,y:viewerState.titleY,w:520,h:Math.max(48,viewerState.titleText.size*1.35),type:'rectangle',bg:'transparent',opacity:0,borderColor:'transparent',borderWidth:0,radius:0,locked:true});
+        const data=JSON.stringify(viewerState).replace(/</g,'\\u003c');
+        const css=`*{box-sizing:border-box}html,body,#hv{width:100%;height:100%;margin:0;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}#hv{position:relative;touch-action:none;cursor:grab;background-color:${state.bgColor};background-image:linear-gradient(rgba(15,23,42,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(15,23,42,.055) 1px,transparent 1px);background-size:32px 32px}#hv:active{cursor:grabbing}#hw{position:absolute;left:0;top:0;width:1px;height:1px;transform-origin:0 0}.hs,.ht{position:absolute;inset:0;width:1px;height:1px}.hs{z-index:1}.hl{position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible;z-index:2}.htitle{position:absolute;left:${state.titleX}px;top:${state.titleY}px;display:${state.titleVisible?'block':'none'};z-index:3;min-width:520px;color:#0f172a;font-size:32px;font-weight:850;letter-spacing:-.035em}.ht{z-index:4}.hshape,.htile{position:absolute}.htile{display:flex;flex-direction:column;justify-content:center;overflow:hidden;box-shadow:0 12px 32px rgba(15,23,42,.13)}.htile div{overflow-wrap:anywhere;white-space:pre-wrap}.sub{margin-top:4px}.note{margin-top:9px;opacity:.76}.controls{position:absolute;right:14px;top:14px;z-index:10;display:flex;gap:7px;align-items:center;padding:7px;border:1px solid rgba(15,23,42,.12);border-radius:14px;background:rgba(255,255,255,.84);box-shadow:0 10px 30px rgba(15,23,42,.12);backdrop-filter:blur(8px)}button,#hz{border:0;border-radius:9px;padding:8px 11px;color:#334155;background:#eef2f7;font:600 13px system-ui;cursor:pointer}#hz{min-width:60px;text-align:center}.arrow{position:absolute;z-index:9;display:none;width:32px;height:32px;padding:0;border-radius:50%;color:#475569;background:rgba(255,255,255,.72);box-shadow:0 7px 22px rgba(15,23,42,.1)}.arrow.show{display:block}.arrow[data-d=t]{top:14px;left:50%}.arrow[data-d=b]{bottom:14px;left:50%}.arrow[data-d=l]{left:14px;top:50%}.arrow[data-d=r]{right:14px;top:50%}`;
+        const titleCss=`.htitle{width:520px;font-family:${state.titleText.font};font-size:${state.titleText.size}px;font-weight:${state.titleText.bold?800:400};font-style:${state.titleText.italic?'italic':'normal'};color:${state.titleText.color};text-align:${state.titleText.align||'left'};white-space:pre-wrap}`;
+        return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escapeHtml(state.title)+'</title><style>'+css+titleCss+'</style></head><body><div id="hv"><div id="hw"></div><div class="controls"><button id="hm">−</button><span id="hz">100%</span><button id="hp">＋</button><button id="hf">Fit</button><button id="hh">Home</button></div><button class="arrow" data-d="t">↑</button><button class="arrow" data-d="b">↓</button><button class="arrow" data-d="l">←</button><button class="arrow" data-d="r">→</button></div><script id="hierarchy-data" type="application/json">'+data+'</scr'+'ipt><script>'+viewerScript()+'</scr'+'ipt><script>'+viewerFormattingScript()+'</scr'+'ipt></body></html>';
+      }
+
+      function openExportDialog() {
+        dialogMode='export';$('#dialogTitle').textContent='Export read-only HTML';$('#dialogHelp').textContent='This complete page keeps panning, scroll-wheel zoom, Home, Fit and edge guides—without editing controls.';$('#codeArea').value=buildViewerHtml();$('#dialogSecondary').textContent='Copy code';$('#dialogPrimary').textContent='Download HTML';$('#codeDialog').showModal();
+      }
+      function openImportDialog() {
+        dialogMode='import';$('#dialogTitle').textContent='Import hierarchy';$('#dialogHelp').textContent='Paste a complete HTML export or hierarchy JSON. Your current workspace will be replaced after a valid import.';$('#codeArea').value='';$('#codeArea').placeholder='Paste exported HTML or JSON here…';$('#dialogSecondary').textContent='Cancel';$('#dialogPrimary').textContent='Import hierarchy';$('#codeDialog').showModal();$('#codeArea').focus();
+      }
+      function importCode(code) {
+        let data;
+        try {
+          const trimmed=code.trim();
+          if(trimmed.startsWith('{'))data=JSON.parse(trimmed);
+          else {const doc=new DOMParser().parseFromString(trimmed,'text/html');const script=doc.querySelector('#hierarchy-data');if(!script)throw new Error('No hierarchy data found');data=JSON.parse(script.textContent);}
+          state=normalizeState(data);clearSelection();cancelLinkMode();homeView();renderAll();showToast('Hierarchy imported');return true;
+        } catch(error){showToast('That does not contain a valid hierarchy');return false;}
+      }
+
+      $('#projectTitle').addEventListener('input',event=>{state.title=event.target.value;const field=$('#inspectorTitle',inspector);if(field&&document.activeElement!==field)field.value=state.title;renderTitle();updateEdgeArrows();});
+      $('#showTitle').addEventListener('change',event=>{state.titleVisible=event.target.checked;if(!state.titleVisible)selectedTitle=false;renderAll();});
+      $('#backgroundColor').addEventListener('input',event=>{state.bgColor=event.target.value;viewport.style.backgroundColor=state.bgColor;});
+      $('#defaultZoom').addEventListener('change',event=>{state.defaultZoom=clamp((Number(event.target.value)||100)/100,.1,3);event.target.value=Math.round(state.defaultZoom*100);});
+      $('#setDefaultView').addEventListener('click',()=>{const rect=viewport.getBoundingClientRect();state.defaultZoom=camera.zoom;state.defaultCamera={centerX:(rect.width/2-camera.x)/camera.zoom,centerY:(rect.height/2-camera.y)/camera.zoom,zoom:camera.zoom};state.defaultCenterId=null;$('#defaultZoom').value=Math.round(camera.zoom*100);showToast('Default view saved');});
+      $('#resetProject').addEventListener('click',()=>{if(confirm('Clear every tile, text box, shape and link?')){state={version:1,title:'Untitled hierarchy',titleVisible:true,titleX:-260,titleY:-190,titleText:clone(titleTextDefaults),bgColor:'#f6f7fb',defaultCenterId:null,defaultZoom:1,defaultCamera:null,tiles:[],shapes:[],textBoxes:[],links:[]};clearSelection();renderAll();fitView();}});
+      ['#addTile','#topAddTile'].forEach(id=>$(id).addEventListener('click',addTile));
+      ['#addShape','#topAddShape'].forEach(id=>$(id).addEventListener('click',addShape));
+      ['#addTextBox','#topAddTextBox'].forEach(id=>$(id).addEventListener('click',addTextBox));
+      ['#addLink','#topAddLink'].forEach(id=>$(id).addEventListener('click',()=>viewport.classList.contains('linking')?cancelLinkMode():startLinkMode()));
+      $('#zoomIn').addEventListener('click',()=>{camera.zoom=clamp(camera.zoom*1.2,.1,3);updateCamera();});
+      $('#zoomOut').addEventListener('click',()=>{camera.zoom=clamp(camera.zoom/1.2,.1,3);updateCamera();});
+      $('#undoAction').addEventListener('click',undo);
+      $('#fitView').addEventListener('click',fitView);$('#homeView').addEventListener('click',homeView);
+      $$('.edge-arrow').forEach(arrow=>arrow.addEventListener('click',()=>{const d=arrow.dataset.direction;camera.x+=d==='left'?180:d==='right'?-180:0;camera.y+=d==='top'?140:d==='bottom'?-140:0;updateCamera();}));
+      $('#exportSvg').addEventListener('click',exportSvg);$('#exportPng').addEventListener('click',exportPng);$('#exportHtml').addEventListener('click',openExportDialog);$('#importHtml').addEventListener('click',openImportDialog);
+      $('#closeDialog').addEventListener('click',()=>$('#codeDialog').close());
+      $('#dialogSecondary').addEventListener('click',async()=>{if(dialogMode==='import'){$('#codeDialog').close();return;}try{await navigator.clipboard.writeText($('#codeArea').value);showToast('HTML copied');}catch{$('#codeArea').select();document.execCommand('copy');showToast('HTML copied');}});
+      $('#dialogPrimary').addEventListener('click',()=>{if(dialogMode==='export'){downloadBlob($('#codeArea').value,'text/html',safeName('html'));showToast('HTML exported');}else if(importCode($('#codeArea').value))$('#codeDialog').close();});
+      $('#codeDialog').addEventListener('click',event=>{if(event.target===$('#codeDialog'))$('#codeDialog').close();});
+      window.addEventListener('resize',updateCamera);
+
+      document.addEventListener('pointerdown',event=>{
+        if(event.target.closest('#undoAction'))return;
+        commitHistory();beginHistory();
+      },true);
+      document.addEventListener('keydown',event=>{
+        if(event.target.matches('input, textarea, select')||event.target.isContentEditable)beginHistory();
+      },true);
+      document.addEventListener('beforeinput',beginHistory,true);
+      document.addEventListener('input',()=>scheduleHistory(450),true);
+      document.addEventListener('change',()=>scheduleHistory(),true);
+      document.addEventListener('click',event=>{if(!event.target.closest('#undoAction'))scheduleHistory();},true);
+      window.addEventListener('pointerup',()=>scheduleHistory());
+
+      renderAll();
+      updateUndoControl();
+      requestAnimationFrame(homeView);
+    })();
+  </script>
+</body>
+</html>
