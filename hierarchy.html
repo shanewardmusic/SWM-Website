@@ -117,6 +117,12 @@
 
     .shortcut-list { display: grid; gap: 7px; }
     .shortcut { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 11px; }
+    .tile-picker { max-height: 170px; overflow-y: auto; display: grid; gap: 5px; padding: 7px; border: 1px solid var(--border); border-radius: 11px; background: rgba(255,255,255,.035); }
+    .tile-picker label { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 7px; border-radius: 8px; cursor: pointer; }
+    .tile-picker label:hover { background: rgba(96,165,250,.10); }
+    .tile-picker input { margin-top: 2px; accent-color: var(--accent); }
+    .tile-picker span { min-width: 0; }
+    .tile-picker small { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     kbd { padding: 2px 6px; border: 1px solid var(--border); border-radius: 6px; color: #dbeafe; background: rgba(255,255,255,.06); font: inherit; }
 
     main { min-width: 0; display: grid; grid-template-rows: auto 1fr; overflow: hidden; position: relative; }
@@ -1118,6 +1124,19 @@
         return {rowId:trunk.rowId,trunk,spine:state.links.find(link=>link.rowId===trunk.rowId&&link.rowRole==='spine'),drops:state.links.filter(link=>link.rowId===trunk.rowId&&link.rowRole==='drop')};
       }
 
+      function ancestorTileIds(tileId,result=new Set(),seenLinks=new Set()) {
+        const resolveEndpoint=endpoint=>{
+          if(!endpoint)return;
+          if(endpoint.kind==='tile'){
+            if(endpoint.id!==tileId&&!result.has(endpoint.id)){result.add(endpoint.id);ancestorTileIds(endpoint.id,result,seenLinks);}
+          } else if(endpoint.kind==='link'&&!seenLinks.has(endpoint.id)){
+            seenLinks.add(endpoint.id);const parentLink=state.links.find(link=>link.id===endpoint.id);if(parentLink){if(parentLink.rowParentId)resolveEndpoint({kind:'tile',id:parentLink.rowParentId});else resolveEndpoint(parentLink.from);}
+          }
+        };
+        state.links.filter(link=>link.to&&link.to.kind==='tile'&&link.to.id===tileId).forEach(link=>{if(link.rowParentId)resolveEndpoint({kind:'tile',id:link.rowParentId});else resolveEndpoint(link.from);});
+        return result;
+      }
+
       function discoverFirstLevelChildren(parentId) {
         const childIds=new Set(),removeIds=new Set();let styleSource=null;
         state.links.filter(link=>!link.rowId&&link.from&&link.from.kind==='tile'&&link.from.id===parentId).forEach(base=>{
@@ -1164,29 +1183,55 @@
         renderAll();
       }
 
-      function organiseChildRow(parent,entries=[],requestedGap=90) {
-        const gap=clamp(Number(requestedGap)||90,20,400);let row=childRowForParent(parent.id);
+      function detachTilesForAdoption(tileIds,destinationParentId) {
+        const accepted=[],blocked=[],affectedParents=new Set(),removeIds=new Set();
+        tileIds.forEach(id=>{
+          const incoming=state.links.filter(link=>link.to&&link.to.kind==='tile'&&link.to.id===id&&link.rowParentId!==destinationParentId);
+          const unsafe=incoming.some(link=>!link.rowId&&state.links.some(other=>other.id!==link.id&&[other.from,other.to].some(endpoint=>endpoint&&endpoint.kind==='link'&&endpoint.id===link.id)));
+          if(unsafe){blocked.push(id);return;}
+          incoming.forEach(link=>{removeIds.add(link.id);if(link.rowParentId)affectedParents.add(link.rowParentId);});accepted.push(id);
+        });
+        state.links=state.links.filter(link=>!removeIds.has(link.id));
+        return {accepted,blocked,affectedParents};
+      }
+
+      function tidyChildRows(parentIds,destinationParentId) {
+        parentIds.forEach(parentId=>{
+          if(parentId===destinationParentId)return;
+          const row=childRowForParent(parentId);if(!row)return;
+          const parent=state.tiles.find(tile=>tile.id===parentId);
+          if(!row.drops.length||!parent)state.links=state.links.filter(link=>link.rowId!==row.rowId);
+          else layoutChildRow(parent,row,Number(row.trunk.rowGap)||90);
+        });
+      }
+
+      function organiseChildRow(parent,entries=[],requestedGap=90,existingTileIds=[]) {
+        const gap=clamp(Number(requestedGap)||90,20,400);let row=childRowForParent(parent.id),discovered={childIds:[],removeIds:new Set(),styleSource:null};
+        if(!row){discovered=discoverFirstLevelChildren(parent.id);state.links=state.links.filter(link=>!discovered.removeIds.has(link.id));}
+        const currentIds=new Set(row?row.drops.map(drop=>drop.to&&drop.to.kind==='tile'&&drop.to.id).filter(Boolean):discovered.childIds);
+        const adoption=detachTilesForAdoption(existingTileIds.filter(id=>id!==parent.id&&!currentIds.has(id)),parent.id);
+        if(!row&&!discovered.childIds.length&&!entries.length&&!adoption.accepted.length){showToast(adoption.blocked.length?'Those tiles belong to a shared branch':'No current children were found');return;}
         if(!row){
-          const discovered=discoverFirstLevelChildren(parent.id);
-          if(!discovered.childIds.length&&!entries.length){showToast('No current children were found');return;}
-          state.links=state.links.filter(link=>!discovered.removeIds.has(link.id));
-          const rowId=uid('row'),style=discovered.styleSource||{},provisionalY=discovered.childIds.map(id=>state.tiles.find(tile=>tile.id===id)).filter(Boolean);
-          const rowY=provisionalY.length?provisionalY.reduce((sum,tile)=>sum+tile.y,0)/provisionalY.length:parent.y+parent.h+260;
+          const rowId=uid('row'),style=discovered.styleSource||{},initialIds=[...new Set([...discovered.childIds,...adoption.accepted])];
+          const provisional=initialIds.map(id=>state.tiles.find(tile=>tile.id===id)).filter(Boolean);
+          const rowY=provisional.length?provisional.reduce((sum,tile)=>sum+tile.y,0)/provisional.length:parent.y+parent.h+260;
           const trunk=rowLine(rowId,'trunk',parent.id,{kind:'tile',id:parent.id,port:'bottom'},{kind:'point',x:parent.x+parent.w/2,y:(parent.y+parent.h+rowY)/2},style);
           trunk.rowY=rowY;trunk.rowGap=gap;
           const spine=rowLine(rowId,'spine',parent.id,{kind:'point',x:parent.x+parent.w/2-1,y:(parent.y+parent.h+rowY)/2},{kind:'point',x:parent.x+parent.w/2+1,y:(parent.y+parent.h+rowY)/2},style);
           state.links.push(trunk,spine);
-          discovered.childIds.forEach(id=>state.links.push(rowLine(rowId,'drop',parent.id,{kind:'point',x:0,y:0},{kind:'tile',id,port:'top'},style)));
+          initialIds.forEach(id=>state.links.push(rowLine(rowId,'drop',parent.id,{kind:'point',x:0,y:0},{kind:'tile',id,port:'top'},style)));
           row=childRowForParent(parent.id);
-        }
+        } else adoption.accepted.forEach(id=>state.links.push(rowLine(row.rowId,'drop',parent.id,{kind:'point',x:0,y:0},{kind:'tile',id,port:'top'},row.trunk)));
         const existingTiles=row.drops.map(drop=>drop.to&&drop.to.kind==='tile'&&state.tiles.find(tile=>tile.id===drop.to.id)).filter(Boolean);
+        const rowY=Number.isFinite(row.trunk.rowY)?row.trunk.rowY:parent.y+parent.h+260;
         let nextX=existingTiles.length?Math.max(...existingTiles.map(tile=>tile.x+tile.w))+gap:parent.x;
         entries.forEach(entry=>{
-          const tile=createTile(nextX,row.trunk.rowY);tile.heading=entry.heading;tile.subheading=entry.subheading;tile.note=entry.note;
+          const tile=createTile(nextX,rowY);tile.heading=entry.heading;tile.subheading=entry.subheading;tile.note=entry.note;
           state.tiles.push(tile);state.links.push(rowLine(row.rowId,'drop',parent.id,{kind:'point',x:0,y:0},{kind:'tile',id:tile.id,port:'top'},row.trunk));nextX+=tile.w+gap;
         });
-        row=childRowForParent(parent.id);layoutChildRow(parent,row,gap);
-        showToast(`${row.drops.length} ${row.drops.length===1?'child':'children'} arranged in one row`);
+        row=childRowForParent(parent.id);layoutChildRow(parent,row,gap);tidyChildRows(adoption.affectedParents,parent.id);
+        const blockedText=adoption.blocked.length?` · ${adoption.blocked.length} shared-branch tile${adoption.blocked.length===1?' was':'s were'} left unchanged`:'';
+        showToast(`${row.drops.length} ${row.drops.length===1?'child':'children'} arranged in one row${blockedText}`);
       }
 
       function fontOptions(current) {
@@ -1199,6 +1244,9 @@
         const tile=tiles[0], multiple=tiles.length>1;
         const style=tile.text[activeTextField];
         const childRow=!multiple?childRowForParent(tile.id):null;
+        const childIds=new Set(childRow?childRow.drops.map(drop=>drop.to&&drop.to.kind==='tile'&&drop.to.id).filter(Boolean):[]);
+        const ancestorIds=!multiple?ancestorTileIds(tile.id):new Set();
+        const existingChoices=!multiple?state.tiles.filter(item=>item.id!==tile.id&&!childIds.has(item.id)&&!ancestorIds.has(item.id)).sort((a,b)=>a.heading.localeCompare(b.heading)):[];
         inspector.innerHTML=`
           <h2>Tile ${multiple?'<span class="selection-chip">'+tiles.length+' selected</span>':''}</h2>
           ${!multiple?'<p>Edit here or type directly inside the selected tile. Tab and Shift-Tab move between its three text fields.</p>':''}
@@ -1225,8 +1273,10 @@
           ${!multiple?`<h2>Child row</h2>
           <p>Paste one student, team member or child per line. Use <strong>Name | Subheading | Note</strong> when you want to fill several fields. Existing first-level children will be folded into the same clean branch automatically.</p>
           <div class="field"><label>Children to add</label><textarea id="childRowEntries" placeholder="Jane Smith | 2nd Dan&#10;Alex Jones | 1st Dan"></textarea></div>
+          <div class="field"><label>Existing tiles to link</label>${existingChoices.length?`<div class="tile-picker">${existingChoices.map(item=>`<label><input type="checkbox" name="existingChildTile" value="${item.id}" /><span>${escapeHtml(item.heading)}<small>${escapeHtml(item.subheading||'No subheading')}</small></span></label>`).join('')}</div>`:'<div class="helper">Every other tile is already in this child row.</div>'}</div>
           <div class="field"><label>Gap between tiles</label><input id="childRowGap" type="number" min="20" max="400" value="${Math.round(childRow&&childRow.trunk.rowGap||90)}" /></div>
-          <div class="button-row"><button id="addChildRow" class="primary">Add listed children</button><button id="arrangeChildRow">${childRow?'Rearrange row':'Organise current children'}</button></div>`:''}
+          <div class="button-row"><button id="addChildRow" class="primary">Add listed children</button><button id="linkExistingChildren"${existingChoices.length?'':' disabled'}>Link checked tiles</button></div>
+          <button id="arrangeChildRow" style="width:100%">${childRow?'Rearrange row':'Organise current children'}</button>`:''}
           <h2>Actions</h2>
           <div class="button-row"><button id="duplicateTile">Duplicate</button><button id="defaultTile">Set as centre</button></div>
           <button id="deleteTile" class="danger" style="width:100%">Delete tile${multiple?'s':''}</button>`;
@@ -1255,6 +1305,10 @@
         bindField('#addChildRow','click',()=>{
           const entries=parseChildRowEntries($('#childRowEntries',inspector).value);if(!entries.length){showToast('Add at least one name');return;}
           organiseChildRow(tile,entries,$('#childRowGap',inspector).value);
+        });
+        bindField('#linkExistingChildren','click',()=>{
+          const ids=$$('input[name="existingChildTile"]:checked',inspector).map(input=>input.value);if(!ids.length){showToast('Choose at least one existing tile');return;}
+          organiseChildRow(tile,[],$('#childRowGap',inspector).value,ids);
         });
         bindField('#arrangeChildRow','click',()=>organiseChildRow(tile,[],$('#childRowGap',inspector).value));
         bindField('#duplicateTile','click',()=>duplicateSelection());
