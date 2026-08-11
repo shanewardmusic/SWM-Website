@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" role="img" aria-labelledby="title description">
+  <title id="title">Nikido Ju Jutsu emblem</title>
+  <desc id="description">A red circular emblem with two concentric white rings on a transparent background.</desc>
+
+  <!-- White is confined to the two gaps between the red elements. -->
+  <circle cx="450" cy="450" r="393" fill="#ffffff" />
+
+  <circle cx="450" cy="450" r="409" fill="none" stroke="#ef1735" stroke-width="33" />
+
+  <path
+    fill="#ef1735"
+    fill-rule="evenodd"
+    d="
+      M 450 85
+      A 365 365 0 1 1 450 815
+      A 365 365 0 1 1 450 85
+      Z
+      M 450 280
+      A 170 170 0 1 0 450 620
+      A 170 170 0 1 0 450 280
+      Z
+    "
+  />
+
+  <circle cx="450" cy="450" r="143" fill="#ef1735" />
+</svg>
