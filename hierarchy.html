@@ -628,6 +628,9 @@
         result.links = result.links.map(link => ({
           id: link.id || uid('link'), from: link.from, to: link.to, type: link.type || 'direct', flow: link.flow || 'auto',
           axisLock: ['horizontal','vertical'].includes(link.axisLock) ? link.axisLock : null,
+          rowId: link.rowId || null, rowRole: link.rowRole || null, rowParentId: link.rowParentId || null,
+          rowGap: Number.isFinite(Number(link.rowGap)) ? Number(link.rowGap) : null,
+          rowY: Number.isFinite(Number(link.rowY)) ? Number(link.rowY) : null,
           dashed: !!link.dashed, color: link.color || '#64748b', width: Number(link.width) || 2.5, bends: Array.isArray(link.bends) ? link.bends : []
         }));
         result.links.forEach(link=>{
@@ -1109,6 +1112,83 @@
         showToast(`${horizontal?'Horizontal':'Vertical'} gaps set to ${Math.round(averageGap)}px`);
       }
 
+      function childRowForParent(parentId) {
+        const trunk=state.links.find(link=>link.rowRole==='trunk'&&link.rowParentId===parentId);
+        if(!trunk)return null;
+        return {rowId:trunk.rowId,trunk,spine:state.links.find(link=>link.rowId===trunk.rowId&&link.rowRole==='spine'),drops:state.links.filter(link=>link.rowId===trunk.rowId&&link.rowRole==='drop')};
+      }
+
+      function discoverFirstLevelChildren(parentId) {
+        const childIds=new Set(),removeIds=new Set();let styleSource=null;
+        state.links.filter(link=>!link.rowId&&link.from&&link.from.kind==='tile'&&link.from.id===parentId).forEach(base=>{
+          const dependents=state.links.filter(link=>link.id!==base.id&&[link.from,link.to].some(endpoint=>endpoint&&endpoint.kind==='link'&&endpoint.id===base.id));
+          const attached=dependents.map(link=>({link,tileEndpoint:[link.from,link.to].find(endpoint=>endpoint&&endpoint.kind==='tile'&&endpoint.id!==parentId)}));
+          if(attached.some(item=>!item.tileEndpoint))return;
+          const candidateIds=new Set([base.id,...attached.map(item=>item.link.id)]);
+          const hasExternalDependents=state.links.some(link=>!candidateIds.has(link.id)&&[link.from,link.to].some(endpoint=>endpoint&&endpoint.kind==='link'&&candidateIds.has(endpoint.id)));
+          if(hasExternalDependents)return;
+          const baseChild=base.to&&base.to.kind==='tile'&&base.to.id!==parentId?base.to.id:null;
+          if(!baseChild&&!attached.length)return;
+          if(baseChild)childIds.add(baseChild);
+          attached.forEach(item=>{childIds.add(item.tileEndpoint.id);removeIds.add(item.link.id);});
+          removeIds.add(base.id);styleSource=styleSource||base;
+        });
+        return {childIds:[...childIds],removeIds,styleSource};
+      }
+
+      function parseChildRowEntries(value) {
+        return String(value||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean).slice(0,100).map(line=>{
+          const parts=line.split('|').map(part=>part.trim());
+          return {heading:parts[0]||'New student',subheading:parts[1]||'Student',note:parts.slice(2).join(' | ')};
+        });
+      }
+
+      function rowLine(rowId,rowRole,parentId,from,to,style={}) {
+        return {id:uid('link'),from,to,type:'direct',flow:rowRole==='spine'?'horizontal':'vertical',axisLock:null,rowId,rowRole,rowParentId:parentId,rowGap:null,rowY:null,dashed:!!style.dashed,color:style.color||'#64748b',width:Number(style.width)||2.5,bends:[]};
+      }
+
+      function layoutChildRow(parent,row,gap) {
+        const drops=row.drops.filter(drop=>drop.to&&drop.to.kind==='tile');
+        const tiles=drops.map(drop=>state.tiles.find(tile=>tile.id===drop.to.id)).filter(Boolean).sort((a,b)=>a.x-b.x);
+        if(!tiles.length)return;
+        const rowY=Number.isFinite(row.trunk.rowY)?row.trunk.rowY:tiles.reduce((sum,tile)=>sum+tile.y,0)/tiles.length;
+        const totalWidth=tiles.reduce((sum,tile)=>sum+tile.w,0)+gap*(tiles.length-1),startX=parent.x+parent.w/2-totalWidth/2;
+        const positions=new Map();let cursor=startX;
+        tiles.forEach(tile=>{positions.set(tile.id,{x:cursor,y:rowY});cursor+=tile.w+gap;});
+        applyTilePositions(positions);
+        const parentX=parent.x+parent.w/2,parentBottom=parent.y+parent.h,spineY=(parentBottom+rowY)/2;
+        const centres=tiles.map(tile=>tile.x+tile.w/2),left=Math.min(...centres),right=Math.max(...centres);
+        row.trunk.from={kind:'tile',id:parent.id,port:'bottom'};row.trunk.to={kind:'point',x:parentX,y:spineY};row.trunk.bends=[];row.trunk.rowGap=gap;row.trunk.rowY=rowY;
+        row.spine.from={kind:'point',x:tiles.length===1?left-1:left,y:spineY};row.spine.to={kind:'point',x:tiles.length===1?right+1:right,y:spineY};row.spine.bends=[];
+        drops.forEach(drop=>{const tile=state.tiles.find(item=>item.id===drop.to.id);if(tile){drop.from={kind:'point',x:tile.x+tile.w/2,y:spineY};drop.to={kind:'tile',id:tile.id,port:'top'};drop.type='direct';drop.flow='vertical';drop.bends=[];}});
+        renderAll();
+      }
+
+      function organiseChildRow(parent,entries=[],requestedGap=90) {
+        const gap=clamp(Number(requestedGap)||90,20,400);let row=childRowForParent(parent.id);
+        if(!row){
+          const discovered=discoverFirstLevelChildren(parent.id);
+          if(!discovered.childIds.length&&!entries.length){showToast('No current children were found');return;}
+          state.links=state.links.filter(link=>!discovered.removeIds.has(link.id));
+          const rowId=uid('row'),style=discovered.styleSource||{},provisionalY=discovered.childIds.map(id=>state.tiles.find(tile=>tile.id===id)).filter(Boolean);
+          const rowY=provisionalY.length?provisionalY.reduce((sum,tile)=>sum+tile.y,0)/provisionalY.length:parent.y+parent.h+260;
+          const trunk=rowLine(rowId,'trunk',parent.id,{kind:'tile',id:parent.id,port:'bottom'},{kind:'point',x:parent.x+parent.w/2,y:(parent.y+parent.h+rowY)/2},style);
+          trunk.rowY=rowY;trunk.rowGap=gap;
+          const spine=rowLine(rowId,'spine',parent.id,{kind:'point',x:parent.x+parent.w/2-1,y:(parent.y+parent.h+rowY)/2},{kind:'point',x:parent.x+parent.w/2+1,y:(parent.y+parent.h+rowY)/2},style);
+          state.links.push(trunk,spine);
+          discovered.childIds.forEach(id=>state.links.push(rowLine(rowId,'drop',parent.id,{kind:'point',x:0,y:0},{kind:'tile',id,port:'top'},style)));
+          row=childRowForParent(parent.id);
+        }
+        const existingTiles=row.drops.map(drop=>drop.to&&drop.to.kind==='tile'&&state.tiles.find(tile=>tile.id===drop.to.id)).filter(Boolean);
+        let nextX=existingTiles.length?Math.max(...existingTiles.map(tile=>tile.x+tile.w))+gap:parent.x;
+        entries.forEach(entry=>{
+          const tile=createTile(nextX,row.trunk.rowY);tile.heading=entry.heading;tile.subheading=entry.subheading;tile.note=entry.note;
+          state.tiles.push(tile);state.links.push(rowLine(row.rowId,'drop',parent.id,{kind:'point',x:0,y:0},{kind:'tile',id:tile.id,port:'top'},row.trunk));nextX+=tile.w+gap;
+        });
+        row=childRowForParent(parent.id);layoutChildRow(parent,row,gap);
+        showToast(`${row.drops.length} ${row.drops.length===1?'child':'children'} arranged in one row`);
+      }
+
       function fontOptions(current) {
         const list=fonts.includes(current)?fonts:[current,...fonts];
         return list.map(font=>`<option value="${escAttr(font)}"${font===current?' selected':''}>${escapeHtml(font)}</option>`).join('');
@@ -1118,6 +1198,7 @@
         const tiles=state.tiles.filter(tile=>selectedTiles.has(tile.id));
         const tile=tiles[0], multiple=tiles.length>1;
         const style=tile.text[activeTextField];
+        const childRow=!multiple?childRowForParent(tile.id):null;
         inspector.innerHTML=`
           <h2>Tile ${multiple?'<span class="selection-chip">'+tiles.length+' selected</span>':''}</h2>
           ${!multiple?'<p>Edit here or type directly inside the selected tile. Tab and Shift-Tab move between its three text fields.</p>':''}
@@ -1141,6 +1222,11 @@
           <p>Align the tile centres to a shared axis, or make their current edge-to-edge gaps equal.</p>
           <div class="button-row"><button id="alignTilesVertical" title="Place every tile centre on one vertical line">Align vertically</button><button id="alignTilesHorizontal" title="Place every tile centre on one horizontal line">Align horizontally</button></div>
           <div class="button-row"><button id="spaceTilesHorizontal"${tiles.length<3?' disabled':''}>Space horizontally</button><button id="spaceTilesVertical"${tiles.length<3?' disabled':''}>Space vertically</button></div>`:''}
+          ${!multiple?`<h2>Child row</h2>
+          <p>Paste one student, team member or child per line. Use <strong>Name | Subheading | Note</strong> when you want to fill several fields. Existing first-level children will be folded into the same clean branch automatically.</p>
+          <div class="field"><label>Children to add</label><textarea id="childRowEntries" placeholder="Jane Smith | 2nd Dan&#10;Alex Jones | 1st Dan"></textarea></div>
+          <div class="field"><label>Gap between tiles</label><input id="childRowGap" type="number" min="20" max="400" value="${Math.round(childRow&&childRow.trunk.rowGap||90)}" /></div>
+          <div class="button-row"><button id="addChildRow" class="primary">Add listed children</button><button id="arrangeChildRow">${childRow?'Rearrange row':'Organise current children'}</button></div>`:''}
           <h2>Actions</h2>
           <div class="button-row"><button id="duplicateTile">Duplicate</button><button id="defaultTile">Set as centre</button></div>
           <button id="deleteTile" class="danger" style="width:100%">Delete tile${multiple?'s':''}</button>`;
@@ -1166,6 +1252,11 @@
         bindField('#alignTilesHorizontal','click',()=>alignSelectedTiles('horizontal'));
         bindField('#spaceTilesHorizontal','click',()=>spaceSelectedTiles('horizontal'));
         bindField('#spaceTilesVertical','click',()=>spaceSelectedTiles('vertical'));
+        bindField('#addChildRow','click',()=>{
+          const entries=parseChildRowEntries($('#childRowEntries',inspector).value);if(!entries.length){showToast('Add at least one name');return;}
+          organiseChildRow(tile,entries,$('#childRowGap',inspector).value);
+        });
+        bindField('#arrangeChildRow','click',()=>organiseChildRow(tile,[],$('#childRowGap',inspector).value));
         bindField('#duplicateTile','click',()=>duplicateSelection());
         bindField('#defaultTile','click',()=>{state.defaultCenterId=tile.id;state.defaultZoom=camera.zoom;showToast('Default centre and zoom saved');renderAll();});
         bindField('#deleteTile','click',deleteSelection);
@@ -1429,12 +1520,13 @@
       function deleteSelection() {
         if(selectedTiles.size){
           const ids=new Set(selectedTiles);state.tiles=state.tiles.filter(tile=>!ids.has(tile.id));
-          state.links=state.links.filter(link=>!((link.from.kind==='tile'&&ids.has(link.from.id))||(link.to.kind==='tile'&&ids.has(link.to.id))));
+          state.links=state.links.filter(link=>!ids.has(link.rowParentId)&&!((link.from.kind==='tile'&&ids.has(link.from.id))||(link.to.kind==='tile'&&ids.has(link.to.id))));
           if(ids.has(state.defaultCenterId))state.defaultCenterId=null;
         } else if(selectedShapeId) state.shapes=state.shapes.filter(shape=>shape.id!==selectedShapeId);
         else if(selectedTextBoxId) state.textBoxes=state.textBoxes.filter(box=>box.id!==selectedTextBoxId);
         else if(selectedLinkId){
-          const removed=selectedLinkId;state.links=state.links.filter(link=>link.id!==removed&&!(link.from.kind==='link'&&link.from.id===removed)&&!(link.to.kind==='link'&&link.to.id===removed));
+          const selected=state.links.find(link=>link.id===selectedLinkId),removed=selectedLinkId,rowId=selected&&selected.rowId;
+          state.links=state.links.filter(link=>(!rowId||link.rowId!==rowId)&&link.id!==removed&&!(link.from.kind==='link'&&link.from.id===removed)&&!(link.to.kind==='link'&&link.to.id===removed));
         } else if(selectedTitle){state.titleVisible=false;selectedTitle=false;}
         else return;
         clearSelection();renderAll();showToast('Removed');
