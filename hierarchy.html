@@ -974,7 +974,11 @@
           content.push(`<path id="path-${link.id}" class="link-visible${selected?' link-selected':''}${snap&&snap.targetLinkId===link.id?' link-snap-target':''}" d="${path}" stroke="${link.color}" stroke-width="${link.width}"${dash} />`);
           content.push(`<path class="link-hit" data-link="${link.id}" d="${path}" />`);
           [['from',link.from],['to',link.to]].forEach(([key,endpoint])=>{ if(endpoint && endpoint.kind==='link'){ const p=endpointPoint(endpoint); content.push(`<circle class="link-anchor-dot${selected?' draggable':''}" data-child-link="${link.id}" data-endpoint="${key}" cx="${p.x}" cy="${p.y}" r="${selected?7:5}" />`); } });
-          if(selected && link.bends) link.bends.forEach((bend,index)=>content.push(`<circle class="bend-handle" data-link="${link.id}" data-bend="${index}" cx="${bend.x}" cy="${bend.y}" r="7" />`));
+          if(selected){
+            const automatic=!link.bends.length&&!link.axisLock&&(link.type==='elbow'||link.type==='spline');
+            const handles=automatic?defaultElbowPoints(endpointPoint(link.from),endpointPoint(link.to),link.flow):link.bends;
+            handles.forEach((bend,index)=>content.push(`<circle class="bend-handle" data-link="${link.id}" data-bend="${index}"${automatic?' data-auto-bend="true"':''} cx="${bend.x}" cy="${bend.y}" r="7" />`));
+          }
         });
         if(snap)content.push(`<circle class="branch-snap-preview" cx="${snap.point.x}" cy="${snap.point.y}" r="10" />`);
         linkLayer.innerHTML=content.join('');
@@ -1222,27 +1226,36 @@
 
       function refreshLockedLink(link) {
         if(!link.axisLock)return;
-        link.flow=link.axisLock;link.bends=[];
+        link.flow=link.axisLock;
         const target=subordinateTileForLink(link);
-        if(!target)return;
-        const child=target.tile,childEndpoint=link[target.childKey],anchorEndpoint=link[target.anchorKey];
-        const superior=anchorEndpoint&&anchorEndpoint.kind==='tile'?state.tiles.find(item=>item.id===anchorEndpoint.id):null;
-        const reference=superior?{x:superior.x+superior.w/2,y:superior.y+superior.h/2}:endpointPoint(anchorEndpoint);
-        const centre={x:child.x+child.w/2,y:child.y+child.h/2};
+        if(target){
+          const child=target.tile,childEndpoint=link[target.childKey],anchorEndpoint=link[target.anchorKey];
+          const superior=anchorEndpoint&&anchorEndpoint.kind==='tile'?state.tiles.find(item=>item.id===anchorEndpoint.id):null;
+          const reference=superior?{x:superior.x+superior.w/2,y:superior.y+superior.h/2}:endpointPoint(anchorEndpoint);
+          const centre={x:child.x+child.w/2,y:child.y+child.h/2};
+          if(link.axisLock==='vertical'){
+            const side=Math.abs(centre.y-reference.y)>1?Math.sign(centre.y-reference.y):(childEndpoint.port==='bottom'?-1:1);
+            childEndpoint.port=side>0?'top':'bottom';
+            if(anchorEndpoint&&anchorEndpoint.kind==='tile')anchorEndpoint.port=side>0?'bottom':'top';
+          } else {
+            const side=Math.abs(centre.x-reference.x)>1?Math.sign(centre.x-reference.x):(childEndpoint.port==='right'?-1:1);
+            childEndpoint.port=side>0?'left':'right';
+            if(anchorEndpoint&&anchorEndpoint.kind==='tile')anchorEndpoint.port=side>0?'right':'left';
+          }
+        }
+        const a=endpointPoint(link.from,new Set([link.id])),b=endpointPoint(link.to,new Set([link.id]));
         if(link.axisLock==='vertical'){
-          const side=Math.abs(centre.y-reference.y)>1?Math.sign(centre.y-reference.y):(childEndpoint.port==='bottom'?-1:1);
-          childEndpoint.port=side>0?'top':'bottom';
-          if(anchorEndpoint&&anchorEndpoint.kind==='tile')anchorEndpoint.port=side>0?'bottom':'top';
+          const jointY=link.bends.length?link.bends[0].y:(a.y+b.y)/2;
+          link.bends=[{x:a.x,y:jointY},{x:b.x,y:jointY}];
         } else {
-          const side=Math.abs(centre.x-reference.x)>1?Math.sign(centre.x-reference.x):(childEndpoint.port==='right'?-1:1);
-          childEndpoint.port=side>0?'left':'right';
-          if(anchorEndpoint&&anchorEndpoint.kind==='tile')anchorEndpoint.port=side>0?'right':'left';
+          const jointX=link.bends.length?link.bends[0].x:(a.x+b.x)/2;
+          link.bends=[{x:jointX,y:a.y},{x:jointX,y:b.y}];
         }
       }
 
       function orientLink(link,orientation) {
         if(link.axisLock===orientation){
-          link.axisLock=null;renderAll();showToast(`${orientation[0].toUpperCase()+orientation.slice(1)} line lock released`);return;
+          refreshLockedLink(link);link.axisLock=null;renderAll();showToast(`${orientation[0].toUpperCase()+orientation.slice(1)} line lock released`);return;
         }
         const target=subordinateTileForLink(link);
         if(!target){showToast('This line has no subordinate tile to move');return;}
@@ -1279,7 +1292,7 @@
           <div class="field"><label>Line type</label><select id="linkType"${link.axisLock?' disabled':''}><option value="direct"${link.type==='direct'?' selected':''}>Direct</option><option value="curved"${link.type==='curved'?' selected':''}>Curved</option><option value="elbow"${link.type==='elbow'?' selected':''}>Elbow</option><option value="spline"${link.type==='spline'?' selected':''}>Spline</option></select></div>
           <div class="field"><label>Branch direction</label><select id="linkFlow"${link.axisLock?' disabled':''}><option value="auto"${link.flow==='auto'?' selected':''}>Automatic</option><option value="horizontal"${link.flow==='horizontal'?' selected':''}>Horizontal</option><option value="vertical"${link.flow==='vertical'?' selected':''}>Vertical</option></select></div>
           <div class="button-row"><button id="makeLineVertical" class="${link.axisLock==='vertical'?'active':''}" aria-pressed="${link.axisLock==='vertical'}"${canOrient?'':' disabled'}>Make vertical</button><button id="makeLineHorizontal" class="${link.axisLock==='horizontal'?'active':''}" aria-pressed="${link.axisLock==='horizontal'}"${canOrient?'':' disabled'}>Make horizontal</button></div>
-          <p>${link.axisLock?`The ${link.axisLock} orientation is locked. Tile alignment and spacing can now expand or contract this branch without making it diagonal. Click the active button to unlock it.`:'Choose an orientation to pull the subordinate tile into place and lock the line to that routing direction.'}</p>
+          <p>${link.axisLock?`The ${link.axisLock} orientation is locked. Tile alignment and spacing can expand or contract this branch without making it diagonal. Drag either blue elbow handle to reposition the shared joint, or click the active button to unlock it.`:'Choose an orientation to pull the subordinate tile into place and lock the line to that routing direction. Select an elbow line and drag its blue joint handles to position them.'}</p>
           <div class="field-row"><div class="field"><label>Line colour</label><input id="linkColor" type="color" value="${link.color}" /></div><div class="field"><label>Thickness</label><input id="linkWidth" type="number" min="1" max="20" step="0.5" value="${link.width}" /></div></div>
           <label class="check-row"><input id="linkDashed" type="checkbox"${link.dashed?' checked':''} /> Dashed line</label>
           <p>${link.bends.length?link.bends.length+' custom bend point'+(link.bends.length===1?'':'s'):'The line is using automatic routing.'} Drag the line to reposition its route.${link.from.kind==='link'||link.to.kind==='link'?' Drag the violet attachment point to slide it along its parent branch.':''} Drag this branch over another line to attach its subordinate tile and subtree to that branch. The target spine stays intact and stretches with its tiles, while the duplicate upstream route is removed.</p>
@@ -1571,7 +1584,13 @@
           }
         }
         const bend=event.target.closest('.bend-handle');
-        if(bend){const link=state.links.find(item=>item.id===bend.dataset.link);const point=link.bends[Number(bend.dataset.bend)];interaction={type:'bend',start:clientToWorld(event.clientX,event.clientY),linkId:link.id,index:Number(bend.dataset.bend),x:point.x,y:point.y};event.preventDefault();event.stopPropagation();return;}
+        if(bend){
+          const link=state.links.find(item=>item.id===bend.dataset.link);if(!link)return;
+          if(bend.dataset.autoBend==='true'&&!link.bends.length)link.bends=defaultElbowPoints(endpointPoint(link.from),endpointPoint(link.to),link.flow);
+          const index=Number(bend.dataset.bend),point=link.bends[index];if(!point)return;
+          interaction={type:'bend',start:clientToWorld(event.clientX,event.clientY),linkId:link.id,index,x:point.x,y:point.y};
+          event.preventDefault();event.stopPropagation();return;
+        }
         const path=event.target.closest('.link-hit');if(!path)return;
         const link=state.links.find(item=>item.id===path.dataset.link);if(!link)return;
         if(viewport.classList.contains('linking')){const point=clientToWorld(event.clientX,event.clientY);completeLink({kind:'link',id:link.id,t:nearestTOnLink(link,point)});event.stopPropagation();return;}
@@ -1630,7 +1649,15 @@
           state.titleX=interaction.x+point.x-interaction.start.x;state.titleY=interaction.y+point.y-interaction.start.y;
           renderTitle();updateEdgeArrows();
         } else if(interaction.type==='bend'){
-          const link=state.links.find(item=>item.id===interaction.linkId);const bend=link.bends[interaction.index];bend.x=interaction.x+point.x-interaction.start.x;bend.y=interaction.y+point.y-interaction.start.y;renderLinks();updateEdgeArrows();
+          const link=state.links.find(item=>item.id===interaction.linkId);
+          if(link.axisLock){
+            const a=endpointPoint(link.from,new Set([link.id])),b=endpointPoint(link.to,new Set([link.id]));
+            if(link.axisLock==='vertical')link.bends=[{x:a.x,y:point.y},{x:b.x,y:point.y}];
+            else link.bends=[{x:point.x,y:a.y},{x:point.x,y:b.y}];
+          } else {
+            const bend=link.bends[interaction.index];bend.x=interaction.x+point.x-interaction.start.x;bend.y=interaction.y+point.y-interaction.start.y;
+          }
+          renderLinks();updateEdgeArrows();
         } else if(interaction.type==='anchor'){
           const child=state.links.find(item=>item.id===interaction.childLinkId);
           const parent=state.links.find(item=>item.id===interaction.parentLinkId);
